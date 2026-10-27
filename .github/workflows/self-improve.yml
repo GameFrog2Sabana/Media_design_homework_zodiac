@@ -26,8 +26,9 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       LLM_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      LLM_MODEL: ${{ vars.LLM_MODEL || 'gemini-2.5-flash' }}
-      LLM_BASE_URL: ${{ vars.LLM_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai' }}
+      LLM_MODEL: ${{ vars.LLM_MODEL || 'gemini-3.6-flash' }}
+      LLM_BASE_URL: ${{ vars.LLM_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta' }}
+      LLM_API_STYLE: ${{ vars.LLM_API_STYLE || 'gemini' }}
 
     steps:
       - name: Check out repository

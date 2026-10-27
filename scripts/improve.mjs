@@ -109,6 +109,90 @@ function getMessageContent(payload) {
   return "";
 }
 
+const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_MODEL = "gemini-3.6-flash";
+
+function getBaseUrl() {
+  return (process.env.LLM_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(
+    /\/+$/,
+    "",
+  );
+}
+
+function getModel() {
+  return (process.env.LLM_MODEL?.trim() || DEFAULT_MODEL).replace(
+    /^models\//,
+    "",
+  );
+}
+
+function getApiStyle() {
+  const explicit = process.env.LLM_API_STYLE?.trim().toLowerCase();
+  if (explicit === "gemini" || explicit === "openai") return explicit;
+  const base = getBaseUrl();
+  if (
+    base.includes("generativelanguage.googleapis.com") &&
+    !/\/openai(?:\/|$)/.test(base)
+  ) {
+    return "gemini";
+  }
+  return "openai";
+}
+
+function getInteractionText(payload) {
+  if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text;
+  }
+  return (payload?.steps ?? [])
+    .filter((step) => step?.type === "model_output")
+    .flatMap((step) => step.content ?? [])
+    .filter(
+      (part) =>
+        part?.type === "text" && typeof part?.text === "string",
+    )
+    .map((part) => part.text)
+    .join("");
+}
+
+async function postInteractions({ apiKey, model, system, input }) {
+  const baseUrl = getBaseUrl().replace(/\/openai$/, "");
+  const endpoint = baseUrl.endsWith("/interactions")
+    ? baseUrl
+    : `${baseUrl}/interactions`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 75_000);
+  try {
+    const body = {
+      model,
+      input,
+      store: false,
+      generation_config: {
+        temperature: 0.4,
+        max_output_tokens: 4096,
+      },
+      response_format: {
+        type: "text",
+        mime_type: "application/json",
+      },
+    };
+    if (system) body.system_instruction = system;
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    return { response, text: await response.text() };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function postChat({ endpoint, apiKey, model, messages, useJsonMode }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 75_000);
@@ -145,14 +229,7 @@ async function requestImprovement(config, summary) {
       "LLM_API_KEY / GEMINI_API_KEY is not configured. Set it in .env.local or GitHub Secrets.",
     );
   }
-  const baseUrl = (
-    process.env.LLM_BASE_URL?.trim() ||
-    "https://generativelanguage.googleapis.com/v1beta/openai"
-  ).replace(/\/+$/, "");
-  const endpoint = baseUrl.endsWith("/chat/completions")
-    ? baseUrl
-    : `${baseUrl}/chat/completions`;
-  const model = process.env.LLM_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getModel();
   const guardrails = config.guardrails;
 
   const system = [
@@ -218,6 +295,38 @@ async function requestImprovement(config, summary) {
     { role: "user", content: user },
   ];
 
+  if (getApiStyle() === "gemini") {
+    const { response, text } = await postInteractions({
+      apiKey,
+      model,
+      system,
+      input: user,
+    });
+    if (!response.ok) {
+      let detail = text.slice(0, 500);
+      try {
+        detail = JSON.parse(text)?.error?.message ?? detail;
+      } catch {
+        // Keep raw detail.
+      }
+      throw new Error(`LLM request failed (${response.status}): ${detail}`);
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error("LLM response was not valid JSON.");
+    }
+    const content = getInteractionText(payload);
+    if (!content) throw new Error("LLM returned an empty message.");
+    return { raw: extractJsonObject(content), model };
+  }
+
+  const baseUrl = getBaseUrl().replace(/\/openai$/, "");
+  const endpoint = baseUrl.endsWith("/chat/completions")
+    ? baseUrl
+    : `${baseUrl}/chat/completions`;
   let { response, text } = await postChat({
     endpoint,
     apiKey,

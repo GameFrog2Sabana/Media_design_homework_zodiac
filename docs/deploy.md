@@ -60,13 +60,14 @@ select score, count(*) from ratings group by score order by score;
 ## 4. Gemini API キーを用意する
 
 1. [Google AI Studio](https://aistudio.google.com/app/apikey) で API キーを作成します。
-2. 既定では `gemini-2.5-flash` を使います。別のモデルを使う場合は `LLM_MODEL` を変更します。
-3. OpenAI 互換エンドポイント以外を使う場合は `LLM_BASE_URL` を変更します。URL は `/chat/completions` まで含めても、含めなくても構いません。
+2. 既定では `gemini-3.6-flash` を Gemini の Interactions API で呼びます。別のモデルを使う場合は `LLM_MODEL` を変更します。
+3. OpenAI 互換エンドポイントを使う場合は `LLM_BASE_URL` を変更し、必要なら `LLM_API_STYLE=openai` を設定します。URL は `/chat/completions` まで含めても、含めなくても構いません。
 
 ```dotenv
 GEMINI_API_KEY=...
-LLM_MODEL=gemini-2.5-flash
-LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+LLM_MODEL=gemini-3.6-flash
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+LLM_API_STYLE=gemini
 ```
 
 キーが未設定、または Gemini が失敗した場合、サーバーはローカルフォールバックを返します。画面は止まりません。
@@ -81,8 +82,9 @@ LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
 | --- | --- | --- |
 | `DATABASE_URL` | Neon の接続文字列 | Production（必要なら Preview も） |
 | `GEMINI_API_KEY` | Gemini API キー | Production（必要なら Preview も） |
-| `LLM_MODEL` | `gemini-2.5-flash` など（任意） | Production |
+| `LLM_MODEL` | `gemini-3.6-flash` など（任意） | Production |
 | `LLM_BASE_URL` | 既定値のまま（任意） | Production |
+| `LLM_API_STYLE` | 既定値のまま（任意） | Production |
 
 4. Node.js のバージョンが 22 以上になっていることを確認します（`package.json` の `engines` が優先されます）。
 5. **Deploy** を押します。
@@ -99,7 +101,7 @@ LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
   "ok": true,
   "storage": "postgres",
   "llm": true,
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3.6-flash",
   "configVersion": 1,
   "updatedAt": "2026-10-27"
 }

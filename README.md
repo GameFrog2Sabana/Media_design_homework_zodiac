@@ -31,7 +31,7 @@ npm run dev
 ```dotenv
 # .env.local
 GEMINI_API_KEY=your-api-key
-LLM_MODEL=gemini-2.5-flash
+LLM_MODEL=gemini-3.6-flash
 ```
 
 ## 環境変数
@@ -41,8 +41,9 @@ LLM_MODEL=gemini-2.5-flash
 | `DATABASE_URL` | — | Neon Postgres の接続文字列。未設定ならローカル開発では `.data/`、Vercel では保存なし。 |
 | `GEMINI_API_KEY` | — | Google Gemini API キー。`LLM_API_KEY` でも可。未設定ならローカルフォールバック。 |
 | `LLM_API_KEY` | — | OpenAI 互換 API のキー。`GEMINI_API_KEY` より優先。 |
-| `LLM_MODEL` | — | 既定値 `gemini-2.5-flash`。 |
-| `LLM_BASE_URL` | — | 既定値 `https://generativelanguage.googleapis.com/v1beta/openai`。OpenAI 互換の `/chat/completions` を持つサーバーなら変更可。 |
+| `LLM_MODEL` | — | 既定値 `gemini-3.6-flash`。Gemini 3 系は Interactions API で呼びます。 |
+| `LLM_BASE_URL` | — | 既定値 `https://generativelanguage.googleapis.com/v1beta`（Gemini Interactions API）。OpenAI 互換サーバーなら `/chat/completions` を持つ URL に変更します。 |
+| `LLM_API_STYLE` | — | `gemini` / `openai`。未設定なら URL から自動判定します。 |
 
 API キーはサーバー側でのみ読みます。`NEXT_PUBLIC_` を付けないでください。
 
