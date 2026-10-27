@@ -27,7 +27,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 45;
 
 function jsonError(message: string, status: number) {
   return NextResponse.json(

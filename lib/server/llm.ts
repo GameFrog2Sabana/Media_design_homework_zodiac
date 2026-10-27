@@ -270,7 +270,7 @@ async function requestGeminiJson(
       if (
         retryable &&
         hasFallback &&
-        Date.now() - startedAt <= 8_000
+        Date.now() - startedAt <= 12_000
       ) {
         continue;
       }
