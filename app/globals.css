@@ -1309,6 +1309,11 @@ kbd {
   animation: riseIn 0.4s var(--ease-out) both;
 }
 
+/* The dialog itself takes focus only as a fallback; it is not a control. */
+.modal:focus {
+  outline: none;
+}
+
 /* ------------------------------------------------------------
    Consent
    ------------------------------------------------------------ */

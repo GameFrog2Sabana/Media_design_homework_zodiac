@@ -1,20 +1,31 @@
 "use client";
 
+import { useRef } from "react";
 import { BrandMark, InfoIcon, SparkleIcon } from "./Icons";
 import type { ConsentMode } from "@/lib/types";
+import { useDialogFocus } from "./useDialogFocus";
 
 interface ConsentDialogProps {
   onChoose: (mode: ConsentMode) => void;
 }
 
 export default function ConsentDialog({ onChoose }: ConsentDialogProps) {
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  // There is no Escape handler: the mode must be chosen before the sky opens.
+  // Focus the dialog itself rather than the accept button, so nobody is
+  // nudged into research participation by the keyboard.
+  useDialogFocus(panelRef);
+
   return (
     <div className="modal-backdrop consent-backdrop">
       <section
+        ref={panelRef}
         className="modal consent-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="consent-title"
+        tabIndex={-1}
       >
         <div className="consent-orbit" aria-hidden="true">
           <span className="orbit-star star-a" />

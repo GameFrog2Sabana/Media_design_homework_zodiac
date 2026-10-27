@@ -10,6 +10,7 @@ import {
   SegmentIcon,
   SparkleIcon,
 } from "./Icons";
+import { useDialogFocus } from "./useDialogFocus";
 
 interface HelpDialogProps {
   consent: ConsentMode;
@@ -70,26 +71,13 @@ export default function HelpDialog({
   onClose,
 }: HelpDialogProps) {
   const titleId = useId();
+  const panelRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [healthFailed, setHealthFailed] = useState(false);
   const research = consent === "research";
 
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      previous?.focus?.();
-    };
-  }, [onClose]);
+  useDialogFocus(panelRef, closeRef, onClose);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +110,7 @@ export default function HelpDialog({
       }}
     >
       <section
+        ref={panelRef}
         className="modal help-modal"
         role="dialog"
         aria-modal="true"

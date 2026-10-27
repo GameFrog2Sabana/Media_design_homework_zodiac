@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useId,
   useMemo,
   useRef,
@@ -20,6 +19,7 @@ import {
   SparkleIcon,
   StarRatingIcon,
 } from "./Icons";
+import { useDialogFocus } from "./useDialogFocus";
 
 interface ResultPanelProps {
   item: GalleryItem;
@@ -74,6 +74,7 @@ export default function ResultPanel({
   onToast,
 }: ResultPanelProps) {
   const titleId = useId();
+  const panelRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const [hoverRating, setHoverRating] = useState(0);
   const [downloading, setDownloading] = useState(false);
@@ -86,21 +87,7 @@ export default function ResultPanel({
     [item.id],
   );
 
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      previous?.focus?.();
-    };
-  }, [onClose]);
+  useDialogFocus(panelRef, closeRef, onClose);
 
   const handleDownload = async () => {
     if (downloading) return;
@@ -124,6 +111,7 @@ export default function ResultPanel({
       }}
     >
       <section
+        ref={panelRef}
         className="modal result-modal"
         role="dialog"
         aria-modal="true"

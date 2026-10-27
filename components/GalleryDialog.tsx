@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { getMotif } from "@/lib/motifs";
 import type { GalleryItem } from "@/lib/types";
 import MiniStarMap from "./MiniStarMap";
@@ -11,6 +11,7 @@ import {
   StarRatingIcon,
   TrashIcon,
 } from "./Icons";
+import { useDialogFocus } from "./useDialogFocus";
 
 interface GalleryDialogProps {
   items: GalleryItem[];
@@ -40,33 +41,24 @@ export default function GalleryDialog({
   onClose,
 }: GalleryDialogProps) {
   const titleId = useId();
+  const panelRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
 
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        if (deleteTarget) {
-          setDeleteTarget(null);
-          return;
-        }
-        if (confirmClear) {
-          setConfirmClear(false);
-          return;
-        }
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      previous?.focus?.();
-    };
+  const handleEscape = useCallback(() => {
+    if (deleteTarget) {
+      setDeleteTarget(null);
+      return;
+    }
+    if (confirmClear) {
+      setConfirmClear(false);
+      return;
+    }
+    onClose();
   }, [confirmClear, deleteTarget, onClose]);
+
+  useDialogFocus(panelRef, closeRef, handleEscape);
 
   return (
     <div
@@ -76,6 +68,7 @@ export default function GalleryDialog({
       }}
     >
       <section
+        ref={panelRef}
         className="modal gallery-modal"
         role="dialog"
         aria-modal="true"
