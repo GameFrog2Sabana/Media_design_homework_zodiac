@@ -8,9 +8,7 @@ next-env.d.ts
 *.tsbuildinfo
 
 # environment
-.env
-.env.local
-.env.*.local
+.env*
 !.env.example
 
 # local research data (never commit participant data)
@@ -30,3 +28,4 @@ Thumbs.db
 
 # test
 coverage/
+.env*
