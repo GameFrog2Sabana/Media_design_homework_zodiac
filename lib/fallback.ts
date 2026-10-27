@@ -192,11 +192,26 @@ export function defaultPaletteForMotif(motifId: string): string {
   return MOTIF_PALETTE[motifId] ?? PALETTE_IDS[0];
 }
 
-function chooseMotif(theme: string, rng: () => number): string {
+const GROUP_MOTIFS = ["bird", "fish", "butterfly"];
+const SOLITARY_MOTIFS = ["lantern", "moon", "eye"];
+
+function chooseMotif(
+  theme: string,
+  rng: () => number,
+  topology: SketchTopology,
+): string {
+  // Separate line groups read as a flock or a school. Prefer a motif that can
+  // hold several bodies even when the user attached a single theme word.
+  if (topology.hasLines && topology.partCount >= 2) {
+    return GROUP_MOTIFS[Math.floor(rng() * GROUP_MOTIFS.length)];
+  }
   const hint = THEME_HINTS.find((entry) =>
     entry.words.some((word) => theme.includes(word)),
   );
   if (hint) return hint.motif;
+  if (topology.hasLines && topology.isolated.length > 0) {
+    return SOLITARY_MOTIFS[Math.floor(rng() * SOLITARY_MOTIFS.length)];
+  }
   return MOTIF_IDS[Math.floor(rng() * MOTIF_IDS.length)];
 }
 
@@ -258,6 +273,12 @@ function topologyEpithet(topology: SketchTopology): string | null {
   if (topology.hasBranch) return "枝分かれの先を照らす星座";
   return "鎖のように連なる星座";
 }
+
+const GROUP_SUBJECTS: Record<string, string> = {
+  bird: "鳥たち",
+  fish: "魚たち",
+  butterfly: "蝶たち",
+};
 
 function structureKeyword(topology: SketchTopology): string | null {
   if (!topology.hasLines) return null;
@@ -347,18 +368,19 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
   );
   const rng = mulberry32(seed);
 
-  const motifId =
-    input.motifId && MOTIF_IDS.includes(input.motifId)
-      ? input.motifId
-      : chooseMotif(theme, rng);
-  const motif = getMotif(motifId);
-  const paletteId = defaultPaletteForMotif(motifId);
-
   const sketch = normalizeEdgePairs(input.sketchEdges ?? [], stars.length).slice(
     0,
     MAX_FIGURE_EDGES,
   );
   const topology = analyzeSketch(sketch, stars.length);
+
+  const motifId =
+    input.motifId && MOTIF_IDS.includes(input.motifId)
+      ? input.motifId
+      : chooseMotif(theme, rng, topology);
+  const motif = getMotif(motifId);
+  const paletteId = defaultPaletteForMotif(motifId);
+
   const figureEdges =
     sketch.length > 0
       ? sketch
@@ -380,7 +402,11 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
   const lead = theme
     ? `「${theme}」の気配が満ちる${season.jp}`
     : season.jp;
-  const story = `${opening}${lead}、${motif.subject}は${action}。${topologyClause(topology)}${aftermath}。${stars.length}つの星をたどると、今夜も${ending}という。`;
+  const subject =
+    topology.partCount >= 2
+      ? GROUP_SUBJECTS[motifId] ?? motif.subject
+      : motif.subject;
+  const story = `${opening}${lead}、${subject}は${action}。${topologyClause(topology)}${aftermath}。${stars.length}つの星をたどると、今夜も${ending}という。`;
 
   const epithet =
     topologyEpithet(topology) ??
