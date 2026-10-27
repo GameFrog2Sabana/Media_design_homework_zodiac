@@ -42,6 +42,7 @@ LLM_MODEL=gemini-3.6-flash
 | `GEMINI_API_KEY` | — | Google Gemini API キー。`LLM_API_KEY` でも可。未設定ならローカルフォールバック。 |
 | `LLM_API_KEY` | — | OpenAI 互換 API のキー。`GEMINI_API_KEY` より優先。 |
 | `LLM_MODEL` | — | 既定値 `gemini-3.6-flash`。Gemini 3 系は Interactions API で呼びます。 |
+| `LLM_FALLBACK_MODELS` | — | 既定値 `gemini-3.5-flash`。503/429 がすぐ返ったときだけ次のモデルへ切り替えます。空文字で無効化。 |
 | `LLM_BASE_URL` | — | 既定値 `https://generativelanguage.googleapis.com/v1beta`（Gemini Interactions API）。OpenAI 互換サーバーなら `/chat/completions` を持つ URL に変更します。 |
 | `LLM_API_STYLE` | — | `gemini` / `openai`。未設定なら URL から自動判定します。 |
 

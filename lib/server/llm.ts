@@ -12,9 +12,15 @@ export class LLMError extends Error {
 
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL = "gemini-3.6-flash";
+const DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash";
 const GEMINI_HOST = "generativelanguage.googleapis.com";
 
 export type LLMApiStyle = "gemini" | "openai";
+
+export interface LLMCompletion {
+  data: unknown;
+  model: string;
+}
 
 export function getLLMBaseUrl(): string {
   return (process.env.LLM_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(
@@ -28,6 +34,23 @@ export function getLLMModel(): string {
     /^models\//,
     "",
   );
+}
+
+/**
+ * Primary model followed by optional fallbacks for transient overload
+ * (503/429). Set LLM_FALLBACK_MODELS to a comma-separated list, or to an
+ * empty string to disable model fallback.
+ */
+export function getLLMModels(): string[] {
+  const rawFallbacks = process.env.LLM_FALLBACK_MODELS;
+  const fallbacks = (
+    rawFallbacks === undefined ? DEFAULT_FALLBACK_MODEL : rawFallbacks
+  )
+    .split(",")
+    .map((model) => model.trim().replace(/^models\//, ""))
+    .filter(Boolean);
+
+  return [...new Set([getLLMModel(), ...fallbacks])];
 }
 
 export function isLLMConfigured(): boolean {
@@ -201,7 +224,7 @@ function errorDetail(text: string, fallback: string): string {
 async function requestGeminiJson(
   messages: ChatMessage[],
   temperature: number,
-): Promise<unknown> {
+): Promise<LLMCompletion> {
   const systemInstruction = messages
     .filter((message) => message.role === "system")
     .map((message) => message.content)
@@ -212,7 +235,6 @@ async function requestGeminiJson(
     .join("\n\n");
 
   const body: Record<string, unknown> = {
-    model: getLLMModel(),
     input,
     // This is a one-shot generation; no need to retain it on Google's side.
     store: false,
@@ -227,45 +249,66 @@ async function requestGeminiJson(
   };
   if (systemInstruction) body.system_instruction = systemInstruction;
 
-  const { response, text } = await postJSON(
-    geminiEndpoint(),
-    { "x-goog-api-key": getAPIKey() },
-    body,
-  );
+  const endpoint = geminiEndpoint();
+  const models = getLLMModels();
 
-  if (!response.ok) {
-    throw new LLMError(
-      `LLM request failed (${response.status}): ${errorDetail(
-        text,
-        text.slice(0, 400),
-      )}`,
-      response.status,
+  // Gemini occasionally answers 503/429 while a model is briefly overloaded.
+  // Fall through to the next configured model when the failure came back
+  // quickly enough that the next attempt still fits the route budget.
+  for (let index = 0; index < models.length; index += 1) {
+    const model = models[index];
+    const startedAt = Date.now();
+    const { response, text } = await postJSON(
+      endpoint,
+      { "x-goog-api-key": getAPIKey() },
+      { ...body, model },
     );
+
+    if (!response.ok) {
+      const retryable = response.status === 503 || response.status === 429;
+      const hasFallback = index < models.length - 1;
+      if (
+        retryable &&
+        hasFallback &&
+        Date.now() - startedAt <= 8_000
+      ) {
+        continue;
+      }
+      throw new LLMError(
+        `LLM request failed (${response.status}): ${errorDetail(
+          text,
+          text.slice(0, 400),
+        )}`,
+        response.status,
+      );
+    }
+
+    let payload: InteractionResponse;
+    try {
+      payload = JSON.parse(text) as InteractionResponse;
+    } catch {
+      throw new LLMError("LLM response was not valid JSON.");
+    }
+
+    const content = getInteractionText(payload);
+    if (!content) {
+      const reason =
+        payload.status === "incomplete"
+          ? "LLM response was incomplete."
+          : "LLM returned an empty message.";
+      throw new LLMError(reason);
+    }
+
+    return { data: extractJsonObject(content), model };
   }
 
-  let payload: InteractionResponse;
-  try {
-    payload = JSON.parse(text) as InteractionResponse;
-  } catch {
-    throw new LLMError("LLM response was not valid JSON.");
-  }
-
-  const content = getInteractionText(payload);
-  if (!content) {
-    const reason =
-      payload.status === "incomplete"
-        ? "LLM response was incomplete."
-        : "LLM returned an empty message.";
-    throw new LLMError(reason);
-  }
-
-  return extractJsonObject(content);
+  throw new LLMError("No LLM model was configured.");
 }
 
 async function requestOpenAIJson(
   messages: ChatMessage[],
   temperature: number,
-): Promise<unknown> {
+): Promise<LLMCompletion> {
   const send = async (useResponseFormat: boolean) => {
     const body: Record<string, unknown> = {
       model: getLLMModel(),
@@ -317,7 +360,10 @@ async function requestOpenAIJson(
     throw new LLMError("LLM returned an empty message.");
   }
 
-  return extractJsonObject(content);
+  return {
+    data: extractJsonObject(content),
+    model: getLLMModel(),
+  };
 }
 
 /**
@@ -327,7 +373,7 @@ async function requestOpenAIJson(
 export async function requestConstellationJson(
   messages: ChatMessage[],
   temperature: number,
-): Promise<unknown> {
+): Promise<LLMCompletion> {
   return getLLMApiStyle() === "gemini"
     ? requestGeminiJson(messages, temperature)
     : requestOpenAIJson(messages, temperature);

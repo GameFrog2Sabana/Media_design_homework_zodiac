@@ -16,7 +16,6 @@ import {
 } from "@/lib/server/creativity";
 import {
   isLLMConfigured,
-  getLLMModel,
   requestConstellationJson,
 } from "@/lib/server/llm";
 import { buildPrompt } from "@/lib/server/prompt";
@@ -95,8 +94,11 @@ export async function POST(request: Request) {
         variant,
         creativityConfig.guardrails,
       );
-      const raw = await requestConstellationJson(messages, variant.temperature);
-      const outcome = coerceConstellationResult(raw, {
+      const completion = await requestConstellationJson(
+        messages,
+        variant.temperature,
+      );
+      const outcome = coerceConstellationResult(completion.data, {
         stars: input.stars,
         sketchEdges: input.edges,
         aspect: input.aspect,
@@ -105,7 +107,7 @@ export async function POST(request: Request) {
       });
       result = outcome.result;
       source = "llm";
-      model = getLLMModel();
+      model = completion.model;
       if (outcome.repaired) {
         console.info(
           "Constellation result repaired:",

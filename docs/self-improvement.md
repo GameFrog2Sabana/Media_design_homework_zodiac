@@ -148,6 +148,7 @@ npm run improve
 DATABASE_URL=...          # 本番 DB を見る場合。未設定なら .data を読む
 GEMINI_API_KEY=...        # または LLM_API_KEY
 LLM_MODEL=gemini-3.6-flash
+LLM_FALLBACK_MODELS=gemini-3.5-flash
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 LLM_API_STYLE=gemini
 ```
@@ -198,6 +199,7 @@ LLM_API_STYLE=gemini
 | Secret | `DATABASE_URL` | 本番 Neon の読み取り |
 | Secret | `GEMINI_API_KEY` | 改善提案の生成 |
 | Variable | `LLM_MODEL` | 任意。既定 `gemini-3.6-flash` |
+| Variable | `LLM_FALLBACK_MODELS` | 任意。既定 `gemini-3.5-flash`。503/429 時の切替先 |
 | Variable | `LLM_BASE_URL` | 任意。既定の Gemini Interactions API URL |
 | Variable | `LLM_API_STYLE` | 任意。`gemini` / `openai`。未設定なら自動判定 |
 

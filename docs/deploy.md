@@ -66,6 +66,7 @@ select score, count(*) from ratings group by score order by score;
 ```dotenv
 GEMINI_API_KEY=...
 LLM_MODEL=gemini-3.6-flash
+LLM_FALLBACK_MODELS=gemini-3.5-flash
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 LLM_API_STYLE=gemini
 ```
@@ -83,6 +84,7 @@ LLM_API_STYLE=gemini
 | `DATABASE_URL` | Neon の接続文字列 | Production（必要なら Preview も） |
 | `GEMINI_API_KEY` | Gemini API キー | Production（必要なら Preview も） |
 | `LLM_MODEL` | `gemini-3.6-flash` など（任意） | Production |
+| `LLM_FALLBACK_MODELS` | `gemini-3.5-flash` など（任意） | Production |
 | `LLM_BASE_URL` | 既定値のまま（任意） | Production |
 | `LLM_API_STYLE` | 既定値のまま（任意） | Production |
 
@@ -176,6 +178,7 @@ Vercel の **Deployments** から以前の成功デプロイを選び、**Promot
 | `storage: "none"` | Vercel に `DATABASE_URL` があるか。値の前後に空白や改行がないか。追加後に Redeploy したか。 |
 | `llm: false` | `GEMINI_API_KEY` または `LLM_API_KEY` が Production に設定されているか。Redeploy したか。 |
 | 生成は動くが毎回「予備の語り」 | Gemini のキー・モデル名・クォータ（quota）を確認。Vercel の Function Logs に `Constellation LLM failed` が出ていないか。 |
+| ログに 503 / 高需要が出る | 一時的なモデル混雑。`LLM_FALLBACK_MODELS` の別モデルへ自動で切り替わります。既定は `gemini-3.5-flash`。 |
 | 評価が 503 | 生成ログが保存されていない（`storage: "none"`）、または `generations` に同じ `session_id` の行がない。 |
 | 429 が返る | 1 セッション 60 秒に 18 回の簡易レート制限。待ってから再試行。 |
 | DB のテーブルがない | `db/schema.sql` を Neon で実行。DB ユーザーに CREATE 権限があるか確認。 |

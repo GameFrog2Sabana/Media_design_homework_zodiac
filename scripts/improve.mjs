@@ -111,6 +111,7 @@ function getMessageContent(payload) {
 
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL = "gemini-3.6-flash";
+const DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash";
 
 function getBaseUrl() {
   return (process.env.LLM_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(
@@ -124,6 +125,18 @@ function getModel() {
     /^models\//,
     "",
   );
+}
+
+function getModels() {
+  const rawFallbacks = process.env.LLM_FALLBACK_MODELS;
+  const fallbacks = (
+    rawFallbacks === undefined ? DEFAULT_FALLBACK_MODEL : rawFallbacks
+  )
+    .split(",")
+    .map((model) => model.trim().replace(/^models\//, ""))
+    .filter(Boolean);
+
+  return [...new Set([getModel(), ...fallbacks])];
 }
 
 function getApiStyle() {
@@ -229,7 +242,8 @@ async function requestImprovement(config, summary) {
       "LLM_API_KEY / GEMINI_API_KEY is not configured. Set it in .env.local or GitHub Secrets.",
     );
   }
-  const model = getModel();
+  const primaryModel = getModel();
+  const models = getModels();
   const guardrails = config.guardrails;
 
   const system = [
@@ -296,33 +310,51 @@ async function requestImprovement(config, summary) {
   ];
 
   if (getApiStyle() === "gemini") {
-    const { response, text } = await postInteractions({
-      apiKey,
-      model,
-      system,
-      input: user,
-    });
-    if (!response.ok) {
-      let detail = text.slice(0, 500);
-      try {
-        detail = JSON.parse(text)?.error?.message ?? detail;
-      } catch {
-        // Keep raw detail.
+    for (let index = 0; index < models.length; index += 1) {
+      const model = models[index];
+      const startedAt = Date.now();
+      const { response, text } = await postInteractions({
+        apiKey,
+        model,
+        system,
+        input: user,
+      });
+
+      if (!response.ok) {
+        const retryable = response.status === 503 || response.status === 429;
+        const hasFallback = index < models.length - 1;
+        if (
+          retryable &&
+          hasFallback &&
+          Date.now() - startedAt <= 20_000
+        ) {
+          continue;
+        }
+
+        let detail = text.slice(0, 500);
+        try {
+          detail = JSON.parse(text)?.error?.message ?? detail;
+        } catch {
+          // Keep raw detail.
+        }
+        throw new Error(`LLM request failed (${response.status}): ${detail}`);
       }
-      throw new Error(`LLM request failed (${response.status}): ${detail}`);
+
+      let payload;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        throw new Error("LLM response was not valid JSON.");
+      }
+      const content = getInteractionText(payload);
+      if (!content) throw new Error("LLM returned an empty message.");
+      return { raw: extractJsonObject(content), model };
     }
 
-    let payload;
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      throw new Error("LLM response was not valid JSON.");
-    }
-    const content = getInteractionText(payload);
-    if (!content) throw new Error("LLM returned an empty message.");
-    return { raw: extractJsonObject(content), model };
+    throw new Error("No LLM model was configured.");
   }
 
+  const model = primaryModel;
   const baseUrl = getBaseUrl().replace(/\/openai$/, "");
   const endpoint = baseUrl.endsWith("/chat/completions")
     ? baseUrl
