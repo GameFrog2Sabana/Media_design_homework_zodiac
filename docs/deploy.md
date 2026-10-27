@@ -38,6 +38,10 @@ git push -u origin main
 
 ## 3. Neon Postgres を用意する
 
+もっとも簡単なのは、Vercel の **Marketplace → Neon** からプロジェクトを作成し、Production / Preview に接続する方法です。`DATABASE_URL` などの環境変数が自動で設定されます。
+
+手動で用意する場合は次のとおりです。
+
 1. [Neon](https://neon.tech/) でプロジェクトを作成します。
 2. アプリに近いリージョンを選びます（Vercel の `vercel.json` は `hnd1` = 東京）。
 3. ダッシュボードから **connection string** をコピーします。

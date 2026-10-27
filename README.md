@@ -4,6 +4,8 @@
 
 UI は [GeoGebra Geometry](https://mat.geogebra.org/geometry?lang=ja) の静かな作図画面を参照しています。Three.js は使わず、星・線・背景を WebGL2 で直接描画しています。
 
+公開中: <https://media-design-homework-zodiac.vercel.app>
+
 ## 特徴
 
 - **3 つの道具だけ** — 移動、点（星）、2 点を結ぶ線分。数式や複雑な設定はありません。
