@@ -1,0 +1,89 @@
+name: Self-improve constellation prompts
+
+on:
+  schedule:
+    # Mondays 03:00 JST (Sunday 18:00 UTC)
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Ignore the minimum sample size (use with care)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: self-improve
+  cancel-in-progress: false
+
+jobs:
+  improve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      LLM_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      LLM_MODEL: ${{ vars.LLM_MODEL || 'gemini-2.5-flash' }}
+      LLM_BASE_URL: ${{ vars.LLM_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Export logs and tune creativity config
+        shell: bash
+        run: |
+          if [ "${{ inputs.force }}" = "true" ]; then
+            npm run improve -- --force
+          else
+            npm run improve
+          fi
+
+      - name: Validate updated config
+        shell: bash
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Upload improvement artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: creativity-improvement-${{ github.run_number }}
+          path: improvements/
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Commit and push validated config
+        shell: bash
+        run: |
+          git config user.name "constellation-atelier-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add config/creativity.json improvements/report-*.md
+          if git diff --cached --quiet; then
+            echo "No config or report changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(creativity): self-improve prompts $(date -u +%Y-%m-%d)"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

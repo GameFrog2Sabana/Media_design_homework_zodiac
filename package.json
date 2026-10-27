@@ -1,0 +1,32 @@
+{
+  "name": "constellation-atelier",
+  "version": "1.0.0",
+  "private": true,
+  "description": "星を動かして線を引き、AIが架空の星座と物語を生み出すWebGLゲーム",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "improve": "node --env-file-if-exists=.env.local scripts/improve.mjs",
+    "improve:dry": "node --env-file-if-exists=.env.local scripts/improve.mjs --dry-run",
+    "export": "node --env-file-if-exists=.env.local scripts/export-logs.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22.9.0"
+  }
+}

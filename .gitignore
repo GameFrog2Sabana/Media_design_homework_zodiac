@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# local research data (never commit participant data)
+.data/
+exports/
+improvements/summary-*.json
+improvements/proposed-config.json
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# deployment
+.vercel/
+
+# test
+coverage/
