@@ -79,6 +79,8 @@ LLM_API_STYLE=gemini
 
 ## 5. Vercel にデプロイする
 
+> **Git 連携の前提:** Vercel アカウントに GitHub のログイン接続が必要です。未接続のまま `vercel git connect` を実行すると `You need to add a Login Connection to your GitHub account first.` で失敗します。先に <https://vercel.com/account/login-connections> で GitHub を接続してください。
+
 1. Vercel で **Add New → Project** を選び、GitHub リポジトリを import します。
 2. Framework Preset は **Next.js** のままにします。Build Command / Output Directory は既定値で構いません。
 3. **Settings → Environment Variables** に次を追加します。
@@ -136,6 +138,8 @@ LLM_API_STYLE=gemini
 3. **Variables** に必要なら `LLM_MODEL` / `LLM_BASE_URL` を追加します。
 4. **Settings → Actions → General → Workflow permissions** で **Read and write permissions** を有効にします。
 5. **Actions → Self-improve constellation prompts → Run workflow** で手動実行し、成功を確認します。
+
+> 初回は本番 DB が空のため、設定は変わらず `improvements/report-*-skip.md` だけが commit されます。実際にプロンプトが更新されるのは、既定のサンプル数（`config/creativity.json` の `minimums`）が集まってからです。サンプル数を無視して試すときだけ `force` を有効にしてください。
 
 ワークフローは以下を行います。
 
