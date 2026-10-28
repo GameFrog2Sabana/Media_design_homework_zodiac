@@ -1,5 +1,5 @@
 import { distanceSquared } from "./geometry";
-import type { FigureEdge, Point } from "./types";
+import type { Edge, FigureEdge, Point } from "./types";
 
 /** The same cap the API accepts for a user's hand-drawn figure. */
 export const MAX_FIGURE_EDGES = 60;
@@ -32,6 +32,15 @@ export function normalizeEdgePairs(
 
 export function edgeKey(edge: FigureEdge): string {
   return `${Math.min(edge[0], edge[1])}-${Math.max(edge[0], edge[1])}`;
+}
+
+/** Stable, order-independent key for an editor edge between two star ids. */
+export function starEdgeKey(a: string, b: string): string {
+  return a <= b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+export function removeEdgeByKey(edges: Edge[], key: string): Edge[] {
+  return edges.filter((edge) => starEdgeKey(edge.a, edge.b) !== key);
 }
 
 /**

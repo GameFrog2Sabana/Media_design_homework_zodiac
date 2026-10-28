@@ -4,8 +4,10 @@ import {
   augmentEdges,
   mstEdges,
   normalizeEdgePairs,
+  removeEdgeByKey,
   repairFigureEdges,
   sameEdgeSet,
+  starEdgeKey,
 } from "@/lib/edges";
 import type { FigureEdge, Point } from "@/lib/types";
 
@@ -96,6 +98,33 @@ describe("sameEdgeSet", () => {
     expect(sameEdgeSet([[0, 1]], [[0, 1], [1, 2]])).toBe(false);
     expect(sameEdgeSet([[0, 1]], [[0, 2]])).toBe(false);
     expect(sameEdgeSet([[0, 1], [1, 2]], [[0, 1], [2, 3]])).toBe(false);
+  });
+});
+
+describe("starEdgeKey", () => {
+  it("is order-independent and stable", () => {
+    expect(starEdgeKey("star-b", "star-a")).toBe(
+      starEdgeKey("star-a", "star-b"),
+    );
+  });
+});
+
+describe("removeEdgeByKey", () => {
+  it("removes only the selected editor edge without mutating the input", () => {
+    const edges = [
+      { a: "star-b", b: "star-a" },
+      { a: "star-a", b: "star-c" },
+    ];
+    const next = removeEdgeByKey(edges, starEdgeKey("star-a", "star-b"));
+    expect(next).toEqual([{ a: "star-a", b: "star-c" }]);
+    expect(edges).toHaveLength(2);
+  });
+
+  it("leaves the edges untouched when the key is unknown", () => {
+    const edges = [{ a: "star-a", b: "star-b" }];
+    expect(removeEdgeByKey(edges, starEdgeKey("star-b", "star-c"))).toEqual(
+      edges,
+    );
   });
 });
 

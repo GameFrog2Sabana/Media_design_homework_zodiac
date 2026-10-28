@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { starEdgeKey } from "@/lib/edges";
 import {
   clamp,
   getStageRect,
   hashString,
   mulberry32,
+  pointToSegmentDistance,
   screenToStar,
   starToScreen,
 } from "@/lib/geometry";
@@ -17,6 +19,7 @@ interface SkyCanvasProps {
   edges: Edge[];
   tool: Tool;
   selectedId: string | null;
+  selectedEdgeKey: string | null;
   lineStartId: string | null;
   result: GenerationResponse | null;
   generating: boolean;
@@ -24,6 +27,7 @@ interface SkyCanvasProps {
   onDragStar: (id: string, x: number, y: number) => void;
   onDragEnd: () => void;
   onSelectStar: (id: string) => void;
+  onSelectEdge: (a: string, b: string) => void;
   onAddStar: (x: number, y: number) => void;
   onLineStarClick: (id: string) => void;
   onEmptyClick: () => void;
@@ -342,6 +346,7 @@ export default function SkyCanvas({
   edges,
   tool,
   selectedId,
+  selectedEdgeKey,
   lineStartId,
   result,
   generating,
@@ -349,6 +354,7 @@ export default function SkyCanvas({
   onDragStar,
   onDragEnd,
   onSelectStar,
+  onSelectEdge,
   onAddStar,
   onLineStarClick,
   onEmptyClick,
@@ -359,6 +365,7 @@ export default function SkyCanvas({
     edges,
     tool,
     selectedId,
+    selectedEdgeKey,
     lineStartId,
     result,
     generating,
@@ -368,12 +375,14 @@ export default function SkyCanvas({
     onDragStar,
     onDragEnd,
     onSelectStar,
+    onSelectEdge,
     onAddStar,
     onLineStarClick,
     onEmptyClick,
   });
   const pointerRef = useRef<PointerState | null>(null);
   const hoverRef = useRef<string | null>(null);
+  const hoverEdgeRef = useRef<string | null>(null);
   const pointerPositionRef = useRef({ x: 0, y: 0 });
   const pointerTargetRef = useRef({ x: 0, y: 0 });
   const pointerInsideRef = useRef(false);
@@ -386,6 +395,7 @@ export default function SkyCanvas({
     edges,
     tool,
     selectedId,
+    selectedEdgeKey,
     lineStartId,
     result,
     generating,
@@ -395,6 +405,7 @@ export default function SkyCanvas({
     onDragStar,
     onDragEnd,
     onSelectStar,
+    onSelectEdge,
     onAddStar,
     onLineStarClick,
     onEmptyClick,
@@ -732,7 +743,7 @@ export default function SkyCanvas({
       const figureEdgeCount = state.result?.result.figureEdges.length ?? 0;
       const maxLines = Math.max(
         24,
-        state.edges.length + figureEdgeCount + 4,
+        state.edges.length + figureEdgeCount + 8,
       );
       const lineData = new Float32Array(maxLines * 12);
       let lineCount = 0;
@@ -827,6 +838,54 @@ export default function SkyCanvas({
             0,
           );
         }
+      }
+
+      const selectedEdge = state.selectedEdgeKey
+        ? state.edges.find(
+            (edge) => starEdgeKey(edge.a, edge.b) === state.selectedEdgeKey,
+          )
+        : null;
+      const hoveredEdgeKey =
+        (state.tool === "move" || state.tool === "line") &&
+        hoverEdgeRef.current &&
+        hoverEdgeRef.current !== state.selectedEdgeKey
+          ? hoverEdgeRef.current
+          : null;
+      const hoveredEdge = hoveredEdgeKey
+        ? state.edges.find(
+            (edge) => starEdgeKey(edge.a, edge.b) === hoveredEdgeKey,
+          )
+        : null;
+
+      const pushEdgeHighlight = (
+        edge: Edge,
+        width: number,
+        alpha: number,
+      ) => {
+        const a = starIndexById.get(edge.a);
+        const b = starIndexById.get(edge.b);
+        if (a === undefined || b === undefined) return;
+        const start = stagePoints[a];
+        const end = stagePoints[b];
+        pushLine(
+          start.x * dpr,
+          start.y * dpr,
+          end.x * dpr,
+          end.y * dpr,
+          width,
+          alpha,
+          secondary,
+          -1,
+          0,
+          0,
+        );
+      };
+
+      if (selectedEdge) {
+        pushEdgeHighlight(selectedEdge, 4.2 * dpr, 0.16);
+        pushEdgeHighlight(selectedEdge, 1.9 * dpr, 1);
+      } else if (hoveredEdge) {
+        pushEdgeHighlight(hoveredEdge, 2.4 * dpr, 0.26);
       }
 
       if (
@@ -974,6 +1033,38 @@ export default function SkyCanvas({
       return best;
     };
 
+    const findEdgeAt = (
+      clientX: number,
+      clientY: number,
+      pointerType = "mouse",
+    ): Edge | null => {
+      const rect = canvas.getBoundingClientRect();
+      const stage = getStageRect(rect.width, rect.height);
+      const point = { x: clientX - rect.left, y: clientY - rect.top };
+      const threshold = pointerType === "touch" ? 22 : 11;
+      const starsNow = stateRef.current.stars;
+      const byId = new Map(starsNow.map((star) => [star.id, star]));
+      let best: Edge | null = null;
+      let bestDistance = threshold;
+
+      for (let i = stateRef.current.edges.length - 1; i >= 0; i -= 1) {
+        const edge = stateRef.current.edges[i];
+        const a = byId.get(edge.a);
+        const b = byId.get(edge.b);
+        if (!a || !b) continue;
+        const d = pointToSegmentDistance(
+          point,
+          starToScreen(a, stage),
+          starToScreen(b, stage),
+        );
+        if (d <= bestDistance) {
+          bestDistance = d;
+          best = edge;
+        }
+      }
+      return best;
+    };
+
     const toStagePoint = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect();
       const stage = getStageRect(rect.width, rect.height);
@@ -983,7 +1074,11 @@ export default function SkyCanvas({
       );
     };
 
-    const updateCursor = (star: Star | null, pointerType: string) => {
+    const updateCursor = (
+      star: Star | null,
+      edge: Edge | null,
+      pointerType: string,
+    ) => {
       const current = stateRef.current;
       if (current.generating) {
         canvas.style.cursor = "wait";
@@ -995,9 +1090,11 @@ export default function SkyCanvas({
             ? "grabbing"
             : star
               ? "grab"
-              : "default";
+              : edge
+                ? "pointer"
+                : "default";
       } else if (current.tool === "line") {
-        canvas.style.cursor = star ? "pointer" : "crosshair";
+        canvas.style.cursor = star || edge ? "pointer" : "crosshair";
       } else {
         canvas.style.cursor = star ? "pointer" : "crosshair";
       }
@@ -1008,6 +1105,9 @@ export default function SkyCanvas({
       if (event.pointerType === "mouse" && event.button !== 0) return;
       if (stateRef.current.generating) return;
       const star = findStarAt(event.clientX, event.clientY, event.pointerType);
+      const edge = star
+        ? null
+        : findEdgeAt(event.clientX, event.clientY, event.pointerType);
       const pointer: PointerState = {
         pointerId: event.pointerId,
         starId: star?.id ?? null,
@@ -1033,6 +1133,8 @@ export default function SkyCanvas({
           } catch {
             // Pointer capture can fail on some embedded browsers.
           }
+        } else if (edge) {
+          callbacksRef.current.onSelectEdge(edge.a, edge.b);
         } else {
           callbacksRef.current.onEmptyClick();
         }
@@ -1048,12 +1150,14 @@ export default function SkyCanvas({
         if (star) {
           callbacksRef.current.onLineStarClick(star.id);
           hoverRef.current = star.id;
+        } else if (edge) {
+          callbacksRef.current.onSelectEdge(edge.a, edge.b);
         } else {
           callbacksRef.current.onEmptyClick();
         }
       }
 
-      updateCursor(star, event.pointerType);
+      updateCursor(star, edge, event.pointerType);
       event.preventDefault();
     };
 
@@ -1094,10 +1198,17 @@ export default function SkyCanvas({
       const star = pointer?.dragging
         ? null
         : findStarAt(event.clientX, event.clientY, event.pointerType);
+      const edge =
+        pointer?.dragging ||
+        star ||
+        stateRef.current.tool === "star"
+          ? null
+          : findEdgeAt(event.clientX, event.clientY, event.pointerType);
       if (!pointer?.dragging) {
         hoverRef.current = star?.id ?? null;
+        hoverEdgeRef.current = edge ? starEdgeKey(edge.a, edge.b) : null;
       }
-      updateCursor(star, event.pointerType);
+      updateCursor(star, edge, event.pointerType);
     };
 
     const finishPointer = (event: PointerEvent) => {
@@ -1115,14 +1226,20 @@ export default function SkyCanvas({
       }
       pointerRef.current = null;
       const star = findStarAt(event.clientX, event.clientY, event.pointerType);
+      const edge =
+        star || stateRef.current.tool === "star"
+          ? null
+          : findEdgeAt(event.clientX, event.clientY, event.pointerType);
       hoverRef.current = star?.id ?? null;
-      updateCursor(star, event.pointerType);
+      hoverEdgeRef.current = edge ? starEdgeKey(edge.a, edge.b) : null;
+      updateCursor(star, edge, event.pointerType);
     };
 
     const onPointerLeave = () => {
       pointerInsideRef.current = false;
       if (!pointerRef.current?.dragging) {
         hoverRef.current = null;
+        hoverEdgeRef.current = null;
         canvas.style.cursor = "default";
       }
     };
@@ -1159,7 +1276,7 @@ export default function SkyCanvas({
       <canvas
         ref={canvasRef}
         className="sky-canvas"
-        aria-label="星図キャンバス。移動ツールでは星をドラッグして動かせます。点ツールでは空をクリックして星を追加し、線分ツールでは2つの星を順にクリックして結びます。"
+        aria-label="星図キャンバス。移動ツールでは星をドラッグして動かせます。線分をクリックすると選択でき、Deleteキーで削除できます。点ツールでは空をクリックして星を追加し、線分ツールでは2つの星を順にクリックして結びます。"
         role="application"
         tabIndex={0}
       />

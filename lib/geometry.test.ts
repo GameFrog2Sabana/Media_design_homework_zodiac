@@ -4,6 +4,7 @@ import { buildFallback } from "@/lib/fallback";
 import {
   edgesToIndices,
   generateDefaultStars,
+  pointToSegmentDistance,
   screenToStar,
   starToScreen,
 } from "@/lib/geometry";
@@ -47,6 +48,34 @@ describe("stage coordinate conversion", () => {
   it("clamps points outside the stage", () => {
     expect(screenToStar({ x: 0, y: 0 }, stage)).toEqual({ x: 0, y: 0 });
     expect(screenToStar({ x: 5000, y: 5000 }, stage)).toEqual({ x: 1, y: 1 });
+  });
+});
+
+describe("pointToSegmentDistance", () => {
+  const start = { x: 0, y: 0 };
+  const end = { x: 1, y: 0 };
+
+  it("measures the perpendicular distance inside the segment", () => {
+    expect(pointToSegmentDistance({ x: 0.5, y: 0.2 }, start, end)).toBeCloseTo(
+      0.2,
+      8,
+    );
+  });
+
+  it("clamps to the nearest endpoint outside the segment", () => {
+    expect(pointToSegmentDistance({ x: -0.3, y: 0 }, start, end)).toBeCloseTo(
+      0.3,
+      8,
+    );
+    expect(
+      pointToSegmentDistance({ x: 1.3, y: 0.4 }, start, end),
+    ).toBeCloseTo(0.5, 8);
+  });
+
+  it("handles a zero-length segment", () => {
+    expect(
+      pointToSegmentDistance({ x: 0.3, y: 0.4 }, start, start),
+    ).toBeCloseTo(0.5, 8);
   });
 });
 

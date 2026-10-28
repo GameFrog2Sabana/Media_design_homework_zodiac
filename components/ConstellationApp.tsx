@@ -19,7 +19,12 @@ import {
   updateGalleryRating,
 } from "@/lib/client-storage";
 import { buildFallback } from "@/lib/fallback";
-import { MAX_FIGURE_EDGES, sameEdgeSet } from "@/lib/edges";
+import {
+  MAX_FIGURE_EDGES,
+  removeEdgeByKey,
+  sameEdgeSet,
+  starEdgeKey,
+} from "@/lib/edges";
 import {
   clamp,
   edgesToIndices,
@@ -64,7 +69,7 @@ const MIN_STARS = 3;
 const MAX_EDGES = MAX_FIGURE_EDGES;
 
 const TOOL_HINTS: Record<Tool, string> = {
-  move: "星をつかんで、好きな場所へ",
+  move: "星を動かす / 線分をクリックで選択",
   star: "空をクリックして、星を置く",
   line: "星を2つ、順にクリックして結ぶ",
 };
@@ -94,6 +99,7 @@ export default function ConstellationApp() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [tool, setTool] = useState<Tool>("move");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
   const [lineStartId, setLineStartId] = useState<string | null>(null);
   const [theme, setTheme] = useState("");
   const [result, setResult] = useState<GenerationResponse | null>(null);
@@ -118,10 +124,12 @@ export default function ConstellationApp() {
   const starsRef = useRef<Star[]>(stars);
   const edgesRef = useRef<Edge[]>(edges);
   const selectedRef = useRef<string | null>(selectedId);
+  const selectedEdgeRef = useRef<string | null>(selectedEdgeKey);
 
   starsRef.current = stars;
   edgesRef.current = edges;
   selectedRef.current = selectedId;
+  selectedEdgeRef.current = selectedEdgeKey;
 
   const showToast = useCallback(
     (message: string, tone: ToastTone = "info") => {
@@ -183,6 +191,12 @@ export default function ConstellationApp() {
     if (message) showToast(message, "info");
   }, [showToast]);
 
+  const clearSelection = useCallback(() => {
+    setSelectedId(null);
+    setSelectedEdgeKey(null);
+    setLineStartId(null);
+  }, []);
+
   const undo = useCallback(() => {
     if (generatingRef.current || past.length === 0) return;
     const snapshot = past[past.length - 1];
@@ -190,12 +204,11 @@ export default function ConstellationApp() {
     setFuture([...future, { stars: starsRef.current, edges: edgesRef.current }].slice(-50));
     setStars(snapshot.stars);
     setEdges(snapshot.edges);
-    setSelectedId(null);
-    setLineStartId(null);
+    clearSelection();
     if (!resultFits(result, snapshot.stars.length)) {
       clearShownResult("配置が変わったため、表示中の星座を閉じました。");
     }
-  }, [past, future, result, clearShownResult]);
+  }, [past, future, result, clearShownResult, clearSelection]);
 
   const redo = useCallback(() => {
     if (generatingRef.current || future.length === 0) return;
@@ -204,12 +217,11 @@ export default function ConstellationApp() {
     setPast([...past, { stars: starsRef.current, edges: edgesRef.current }].slice(-50));
     setStars(snapshot.stars);
     setEdges(snapshot.edges);
-    setSelectedId(null);
-    setLineStartId(null);
+    clearSelection();
     if (!resultFits(result, snapshot.stars.length)) {
       clearShownResult("配置が変わったため、表示中の星座を閉じました。");
     }
-  }, [past, future, result, clearShownResult]);
+  }, [past, future, result, clearShownResult, clearSelection]);
 
   const addStar = useCallback(
     (x: number, y: number) => {
@@ -225,6 +237,7 @@ export default function ConstellationApp() {
       };
       commit([...starsRef.current, star], edgesRef.current);
       setSelectedId(star.id);
+      setSelectedEdgeKey(null);
       setLineStartId(null);
     },
     [commit, showToast],
@@ -238,6 +251,7 @@ export default function ConstellationApp() {
         edges: edgesRef.current,
       };
       setSelectedId(id);
+      setSelectedEdgeKey(null);
       setLineStartId(null);
     },
     [],
@@ -273,18 +287,26 @@ export default function ConstellationApp() {
 
   const handleSelectStar = useCallback((id: string) => {
     setSelectedId(id);
+    setSelectedEdgeKey(null);
+    setLineStartId(null);
+  }, []);
+
+  const handleSelectEdge = useCallback((a: string, b: string) => {
+    if (generatingRef.current) return;
+    setSelectedEdgeKey(starEdgeKey(a, b));
+    setSelectedId(null);
     setLineStartId(null);
   }, []);
 
   const handleEmptyClick = useCallback(() => {
-    setSelectedId(null);
-    setLineStartId(null);
-  }, []);
+    clearSelection();
+  }, [clearSelection]);
 
   const handleLineStarClick = useCallback(
     (id: string) => {
       if (generatingRef.current) return;
       setSelectedId(id);
+      setSelectedEdgeKey(null);
       if (!lineStartId) {
         setLineStartId(id);
         return;
@@ -311,9 +333,28 @@ export default function ConstellationApp() {
 
   const deleteSelected = useCallback(() => {
     if (generatingRef.current) return;
+
+    const edgeKey = selectedEdgeRef.current;
+    if (edgeKey) {
+      const nextEdges = removeEdgeByKey(edgesRef.current, edgeKey);
+      if (nextEdges.length === edgesRef.current.length) {
+        clearSelection();
+        showToast("選択した線分が見つかりませんでした。", "error");
+        return;
+      }
+      commit(starsRef.current, nextEdges);
+      clearSelection();
+      if (result) {
+        clearShownResult("線分を削除したため、表示中の星座をリセットしました。");
+      } else {
+        showToast("線分を削除しました。", "info");
+      }
+      return;
+    }
+
     const id = selectedRef.current;
     if (!id) {
-      showToast("先に、削除したい星を選んでください。", "info");
+      showToast("先に、削除したい星か線分を選んでください。", "info");
       return;
     }
     if (starsRef.current.length <= MIN_STARS) {
@@ -325,23 +366,21 @@ export default function ConstellationApp() {
       (edge) => edge.a !== id && edge.b !== id,
     );
     commit(nextStars, nextEdges);
-    setSelectedId(null);
-    setLineStartId(null);
+    clearSelection();
     if (result) {
       clearShownResult("星を削除したため、表示中の星座をリセットしました。");
     } else {
       showToast("星と、つながっていた線を削除しました。", "info");
     }
-  }, [commit, result, clearShownResult, showToast]);
+  }, [commit, result, clearShownResult, clearSelection, showToast]);
 
   const shuffle = useCallback(() => {
     if (generatingRef.current) return;
     commit(generateDefaultStars(6), []);
-    setSelectedId(null);
-    setLineStartId(null);
+    clearSelection();
     clearShownResult();
     showToast("6つの星を、新しく並べ直しました。", "success");
-  }, [commit, clearShownResult, showToast]);
+  }, [commit, clearShownResult, clearSelection, showToast]);
 
   const nudgeSelected = useCallback(
     (dx: number, dy: number) => {
@@ -381,8 +420,7 @@ export default function ConstellationApp() {
     attemptRef.current = nextAttempt;
     generatingRef.current = true;
     setGenerating(true);
-    setSelectedId(null);
-    setLineStartId(null);
+    clearSelection();
     setActiveItem(null);
     setResultIsNew(false);
     const startedAt = performance.now();
@@ -509,7 +547,7 @@ export default function ConstellationApp() {
     } else if (response.source === "fallback") {
       showToast("いまAIに届かなかったため、予備の語りで生みました。", "info");
     }
-  }, [consent, theme, computeAspect, showToast]);
+  }, [consent, theme, computeAspect, clearSelection, showToast]);
 
   const rateItem = useCallback(
     (item: GalleryItem, score: number) => {
@@ -685,6 +723,7 @@ export default function ConstellationApp() {
         if (typing) return;
         setLineStartId(null);
         setSelectedId(null);
+        setSelectedEdgeKey(null);
         return;
       }
 
@@ -711,12 +750,15 @@ export default function ConstellationApp() {
       if (key === "v" || key === "V") {
         setTool("move");
         setLineStartId(null);
+        setSelectedEdgeKey(null);
       } else if (key === "p" || key === "P") {
         setTool("star");
         setLineStartId(null);
+        setSelectedEdgeKey(null);
       } else if (key === "l" || key === "L") {
         setTool("line");
         setLineStartId(null);
+        setSelectedEdgeKey(null);
       } else if (key === "Delete" || key === "Backspace") {
         event.preventDefault();
         actionsRef.current.deleteSelected();
@@ -779,6 +821,7 @@ export default function ConstellationApp() {
         edges={edges}
         tool={tool}
         selectedId={selectedId}
+        selectedEdgeKey={selectedEdgeKey}
         lineStartId={lineStartId}
         result={result}
         generating={generating}
@@ -786,6 +829,7 @@ export default function ConstellationApp() {
         onDragStar={handleDragStar}
         onDragEnd={handleDragEnd}
         onSelectStar={handleSelectStar}
+        onSelectEdge={handleSelectEdge}
         onAddStar={addStar}
         onLineStarClick={handleLineStarClick}
         onEmptyClick={handleEmptyClick}
@@ -806,10 +850,11 @@ export default function ConstellationApp() {
 
       <ToolRail
         tool={tool}
-        selectedId={selectedId}
+        canDelete={Boolean(selectedId || selectedEdgeKey)}
         onToolChange={(nextTool) => {
           setTool(nextTool);
           setLineStartId(null);
+          setSelectedEdgeKey(null);
         }}
         onDelete={deleteSelected}
         onShuffle={shuffle}

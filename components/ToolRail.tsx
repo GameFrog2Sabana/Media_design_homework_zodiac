@@ -13,7 +13,7 @@ import {
 
 interface ToolRailProps {
   tool: Tool;
-  selectedId: string | null;
+  canDelete: boolean;
   onToolChange: (tool: Tool) => void;
   onDelete: () => void;
   onShuffle: () => void;
@@ -32,7 +32,7 @@ const TOOLS: ToolDefinition[] = [
     id: "move",
     label: "移動",
     shortcut: "V",
-    hint: "星をドラッグして動かす",
+    hint: "星をドラッグして動かす / 線分を選択",
     icon: MoveIcon,
   },
   {
@@ -53,7 +53,7 @@ const TOOLS: ToolDefinition[] = [
 
 export default function ToolRail({
   tool,
-  selectedId,
+  canDelete,
   onToolChange,
   onDelete,
   onShuffle,
@@ -91,13 +91,13 @@ export default function ToolRail({
           type="button"
           className="tool-button subtle"
           onClick={onDelete}
-          disabled={!selectedId}
-          aria-label="選択した星を削除"
+          disabled={!canDelete}
+          aria-label="選択した星または線分を削除"
         >
           <TrashIcon size={21} />
           <span className="tool-tip">
-            <b>星を削除</b>
-            <span>選択中の星と、つながる線を消す</span>
+            <b>選択を削除</b>
+            <span>選んだ星、または線分を消す</span>
             <kbd>Delete</kbd>
           </span>
         </button>

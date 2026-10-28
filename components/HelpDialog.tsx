@@ -31,7 +31,7 @@ const TOOL_HELP = [
     icon: MoveIcon,
     key: "V",
     title: "移動",
-    text: "星をつかんで、好きな場所へ。ドラッグした軌跡は保存しません。",
+    text: "星をつかんで、好きな場所へ。線分をクリックすると選択でき、Deleteキーで削除できます。ドラッグした軌跡は保存しません。",
   },
   {
     icon: PointIcon,
@@ -49,7 +49,7 @@ const TOOL_HELP = [
 
 const SHORTCUTS = [
   ["V / P / L", "移動・点・線分ツール"],
-  ["Delete", "選択した星を削除"],
+  ["Delete", "選択した星・線分を削除"],
   ["Ctrl / ⌘ + Z", "元に戻す"],
   ["Ctrl / ⌘ + Shift + Z", "やり直す"],
   ["矢印キー", "選択した星を微調整（Shiftで大きく）"],

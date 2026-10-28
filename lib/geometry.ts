@@ -62,6 +62,29 @@ export function distanceSquared(a: Point, b: Point): number {
   return dx * dx + dy * dy;
 }
 
+/**
+ * Shortest distance from a point to a finite segment. Used for hit-testing a
+ * drawn line without treating the infinite extension beyond its endpoints as
+ * clickable.
+ */
+export function pointToSegmentDistance(
+  point: Point,
+  start: Point,
+  end: Point,
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return distance(point, start);
+  const t = clamp01(
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+  );
+  return distance(point, {
+    x: start.x + dx * t,
+    y: start.y + dy * t,
+  });
+}
+
 export function edgeLength(points: Point[], edge: FigureEdge): number {
   return distance(points[edge[0]], points[edge[1]]);
 }
