@@ -158,7 +158,7 @@ export function createShareSvg(item: GalleryItem): string {
   <circle cx="${layout.chartCenter.x}" cy="${layout.chartCenter.y}" r="${
     layout.chartRadius + 26
   }" fill="none" stroke="${palette.primary}" stroke-width="1" opacity="0.08"/>
-  <g transform="translate(${layout.motif.x} ${layout.motif.y}) scale(${layout.motif.scale})">
+  <g transform="translate(${layout.motif.x} ${layout.motif.y}) scale(${layout.motif.scaleX} ${layout.motif.scaleY})">
     ${motifSvg}
   </g>
   ${dustSvg}

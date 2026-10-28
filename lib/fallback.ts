@@ -9,6 +9,7 @@ import {
 import { hashString, mulberry32 } from "./geometry";
 import { getMotif, MOTIFS, MOTIF_IDS } from "./motifs";
 import { PALETTE_IDS } from "./palettes";
+import { analyzeShape, type ShapeAnalysis } from "./shape";
 import type { ConstellationResult, FigureEdge, Point } from "./types";
 
 export interface FallbackInput {
@@ -199,20 +200,37 @@ function chooseMotif(
   theme: string,
   rng: () => number,
   topology: SketchTopology,
+  analysis: ShapeAnalysis,
 ): string {
+  const ranked = analysis.motifMatches;
+  if (ranked.length === 0) return MOTIF_IDS[0];
+  const topScore = ranked[0].score;
+  const shapeCandidate = (ids: string[]): string | null =>
+    ranked.find(
+      (match) => ids.includes(match.id) && match.score >= topScore - 2,
+    )?.id ?? null;
+
   // Separate line groups read as a flock or a school. Prefer a motif that can
-  // hold several bodies even when the user attached a single theme word.
+  // hold several bodies, but only when it still suits the silhouette.
   if (topology.hasLines && topology.partCount >= 2) {
-    return GROUP_MOTIFS[Math.floor(rng() * GROUP_MOTIFS.length)];
+    const group = shapeCandidate(GROUP_MOTIFS);
+    if (group) return group;
   }
   const hint = THEME_HINTS.find((entry) =>
     entry.words.some((word) => theme.includes(word)),
   );
-  if (hint) return hint.motif;
-  if (topology.hasLines && topology.isolated.length > 0) {
-    return SOLITARY_MOTIFS[Math.floor(rng() * SOLITARY_MOTIFS.length)];
+  if (hint) {
+    const match = ranked.find((candidate) => candidate.id === hint.motif);
+    if (match && match.score >= topScore - 3) return hint.motif;
   }
-  return MOTIF_IDS[Math.floor(rng() * MOTIF_IDS.length)];
+  if (topology.hasLines && topology.isolated.length > 0) {
+    const solitary = shapeCandidate(SOLITARY_MOTIFS);
+    if (solitary) return solitary;
+  }
+
+  // Keep a little variation among motifs that fit the shape equally well.
+  const shortlist = ranked.filter((match) => match.score >= topScore - 1);
+  return shortlist[Math.floor(rng() * shortlist.length)]?.id ?? ranked[0].id;
 }
 
 function charLength(value: string): number {
@@ -287,6 +305,33 @@ function structureKeyword(topology: SketchTopology): string | null {
   if (topology.hasCycle) return "巡り";
   if (topology.hasBranch) return "枝分かれ";
   return "連なり";
+}
+
+function shapeKeyword(analysis: ShapeAnalysis): string | null {
+  if (analysis.components.some((component) => component.pathShape === "arc")) {
+    return "弧";
+  }
+  if (analysis.components.some((component) => component.kind === "cycle")) {
+    return "環";
+  }
+  if (analysis.components.length >= 2) return "群れ";
+  if (analysis.isolated.length > 0) return "孤星";
+  if (analysis.orientation === "horizontal") return "横長";
+  if (analysis.orientation === "vertical") return "縦長";
+  if (analysis.orientation === "diagonal") return "斜行";
+  if (analysis.orientation === "compact") return "小さな巣";
+  return null;
+}
+
+function shapeEpithet(analysis: ShapeAnalysis): string | null {
+  if (analysis.components.some((component) => component.pathShape === "arc")) {
+    return "弧を描いて夜を渡る星座";
+  }
+  if (analysis.orientation === "horizontal") return "遠い岸へ横たわる星座";
+  if (analysis.orientation === "vertical") return "空に立ちのぼる星座";
+  if (analysis.orientation === "diagonal") return "斜めに夜を渡る星座";
+  if (analysis.orientation === "compact") return "小さな巣に宿る星座";
+  return null;
 }
 
 function buildName(
@@ -373,14 +418,6 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
     MAX_FIGURE_EDGES,
   );
   const topology = analyzeSketch(sketch, stars.length);
-
-  const motifId =
-    input.motifId && MOTIF_IDS.includes(input.motifId)
-      ? input.motifId
-      : chooseMotif(theme, rng, topology);
-  const motif = getMotif(motifId);
-  const paletteId = defaultPaletteForMotif(motifId);
-
   const figureEdges =
     sketch.length > 0
       ? sketch
@@ -390,6 +427,14 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
           Math.min(7, Math.max(4, stars.length - 1)),
           11,
         );
+  const analysis = analyzeShape(stars, figureEdges, aspect);
+
+  const motifId =
+    input.motifId && MOTIF_IDS.includes(input.motifId)
+      ? input.motifId
+      : chooseMotif(theme, rng, topology, analysis);
+  const motif = getMotif(motifId);
+  const paletteId = defaultPaletteForMotif(motifId);
 
   const { name, reading } = buildName(motifId, rng, topology);
   const season = SEASONS[Math.floor(rng() * SEASONS.length)];
@@ -410,12 +455,13 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
 
   const epithet =
     topologyEpithet(topology) ??
+    shapeEpithet(analysis) ??
     (theme ? `${theme}を待つ星座` : EPITHETS[Math.floor(rng() * EPITHETS.length)]);
 
   const keywords = Array.from(
     new Set([
       motif.label,
-      season.label,
+      shapeKeyword(analysis) ?? season.label,
       structureKeyword(topology) ?? quality,
     ]),
   ).slice(0, 3);
@@ -429,6 +475,7 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
     story,
     figureEdges,
     keywords,
+    formReading: analysis.summary,
   };
 }
 

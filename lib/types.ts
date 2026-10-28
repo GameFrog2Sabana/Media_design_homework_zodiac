@@ -30,6 +30,8 @@ export interface ConstellationResult {
   story: string;
   figureEdges: FigureEdge[];
   keywords: string[];
+  /** A short, geometry-grounded reading of the drawing. */
+  formReading?: string;
 }
 
 export type GenerationSource = "llm" | "fallback" | "offline";

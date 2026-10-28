@@ -49,4 +49,19 @@ describe("buildPrompt", () => {
     expect(text).toContain("全ての星を使う必要はない");
     expect(text).toContain("複数のまとまり、孤立した星もそのまま受け入れる");
   });
+
+  it("puts an explicit shape reading before the name and motif", () => {
+    const text = promptText([
+      [0, 1],
+      [2, 3],
+    ]);
+
+    expect(text).toContain("【形の分析（名前より先に読む）】");
+    expect(text).toContain("全体は横長");
+    expect(text).toContain("視覚的な手がかり");
+    expect(text).toContain("名前の着想候補");
+    expect(text).toContain("【モチーフ候補（この形との相性順）】");
+    expect(text).toContain("最初に formReading");
+    expect(text).toContain('"formReading"');
+  });
 });

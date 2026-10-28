@@ -93,7 +93,7 @@ export default function MiniStarMap({
         ))}
 
         <g
-          transform={`translate(${layout.motif.x} ${layout.motif.y}) scale(${layout.motif.scale})`}
+          transform={`translate(${layout.motif.x} ${layout.motif.y}) scale(${layout.motif.scaleX} ${layout.motif.scaleY})`}
           fill="none"
           stroke={palette.primary}
           strokeWidth="0.9"

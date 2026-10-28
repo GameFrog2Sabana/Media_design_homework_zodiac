@@ -9,6 +9,7 @@ import {
 } from "react";
 import { getMotif } from "@/lib/motifs";
 import { getPalette } from "@/lib/palettes";
+import { analyzeShape } from "@/lib/shape";
 import { downloadConstellationPng } from "@/lib/share";
 import type { GalleryItem } from "@/lib/types";
 import MiniStarMap from "./MiniStarMap";
@@ -85,6 +86,12 @@ export default function ResultPanel({
   const figureNumber = useMemo(
     () => item.id.replace(/-/g, "").slice(0, 6).toUpperCase(),
     [item.id],
+  );
+  const formReading = useMemo(
+    () =>
+      item.result.formReading ||
+      analyzeShape(item.stars, item.result.figureEdges, item.aspect).summary,
+    [item.result.formReading, item.result.figureEdges, item.stars, item.aspect],
   );
 
   useDialogFocus(panelRef, closeRef, onClose);
@@ -176,6 +183,9 @@ export default function ResultPanel({
               <p className="result-reading">{item.result.reading}</p>
             ) : null}
             <p className="result-epithet">{item.result.epithet}</p>
+
+            <p className="story-kicker form-kicker">FORM / 形の読み</p>
+            <p className="result-form">{formReading}</p>
 
             <p className="story-kicker">MYTH / 神話</p>
             <p className="result-story">{item.result.story}</p>

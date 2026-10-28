@@ -1,6 +1,6 @@
 import type { FigureEdge, Point } from "@/lib/types";
-import { MOTIFS } from "@/lib/motifs";
 import { PALETTES } from "@/lib/palettes";
+import { analyzeShape, shapeNameHints } from "@/lib/shape";
 import type {
   CreativityGuardrails,
   CreativityVariant,
@@ -16,17 +16,6 @@ export interface PromptInput {
 export interface ChatMessage {
   role: "system" | "user";
   content: string;
-}
-
-function shapeDescription(input: PromptInput): string {
-  const xs = input.stars.map((star) => star.x * input.aspect);
-  const ys = input.stars.map((star) => 1 - star.y);
-  const width = Math.max(...xs) - Math.min(...xs);
-  const height = Math.max(...ys) - Math.min(...ys);
-  if (width > height * 1.45) return "横に大きく広がる構図";
-  if (height > width * 1.45) return "縦に伸びる構図";
-  if (width < 0.45 && height < 0.45) return "中心に寄り集まった構図";
-  return "横と縦がほどよく均衡した構図";
 }
 
 function starLines(input: PromptInput): string {
@@ -122,9 +111,18 @@ export function buildPrompt(
   variant: CreativityVariant,
   guardrails: CreativityGuardrails,
 ): ChatMessage[] {
-  const motifList = MOTIFS.map((motif) => `${motif.id}（${motif.label}）`).join(
-    "、",
-  );
+  const shape = analyzeShape(input.stars, input.sketchEdges, input.aspect);
+  const motifMatches = shape.motifMatches.slice(0, 7);
+  const motifList = motifMatches
+    .map((motif) => `${motif.id}（${motif.label}）`)
+    .join("、");
+  const motifLines = motifMatches
+    .map(
+      (motif, index) =>
+        `${index + 1}. ${motif.id}（${motif.label}）— ${motif.reason}`,
+    )
+    .join("\n");
+  const hints = shapeNameHints(shape).join("、");
   const paletteList = PALETTES.map(
     (palette) => `${palette.id}（${palette.label}）`,
   ).join("、");
@@ -144,6 +142,8 @@ export function buildPrompt(
     "",
     "【出力の絶対条件】",
     "・JSONオブジェクトのみを出力する。前後に文章、Markdown、コードフェンスを付けない。",
+    "・最初に formReading を書く。formReading は、星の向き・重心・密度・まとまり・孤立星・線の曲がりについて、実際に観測できる形だけを60〜120字の詩的な一文で説明する。文体は常体（〜だ／〜ている）に揃える。",
+    "・formReading に書いた形と、name・motif・epithet・story を必ず響き合わせる。形を無視した既製の星座名や絵柄を選ばない。",
     "・name は2〜12文字で、必ず「〜座」で終わる。実在の星座名（「〜座」を含む）は使わない。",
     "・reading は name のひらがな読み。ひらがなのみ（長音「ー」可）で、末尾は「ざ」。",
     "・ユーザーの下書き線がある場合、figureEdges はその線を一本も欠かさず、同じ星番号のペアでそのまま返す。追加・削除・張り替えをしてはいけない。",
@@ -151,7 +151,7 @@ export function buildPrompt(
     "・星座は連結である必要はなく、閉路も不要。複数のまとまりや、線に含まれない星があってよい。",
     "・name・epithet・story は、線のまとまりの数、輪・鎖・枝分かれ、孤立した星を読み取って発想する。複数パーツなら、その離れ方や群れを名前と神話に織り込む。",
     "・figureEdges はモチーフの輪郭を感じさせる形にすること。ただし下書き線がある場合は形を変えず、モチーフの選び方で響き合わせる。",
-    "・motif は、複数パーツなら群れ・渡り・島影・遠い灯りを感じさせるものを優先する。",
+    "・motif は、形との相性が上位の候補から選ぶ。複数パーツなら群れ・渡り・島影・遠い灯りを感じさせるものを優先する。",
     "・story は90〜160字。改行なし。神話のエピソードとして、誰が、何をして、なぜ空に置かれたのかを一つ描く。神や精霊、獣、旅人の小さな事件でよい。",
     "・keywords は2〜3個、各12文字以内。",
     "・motif と paletteId は必ず候補から選ぶ。",
@@ -166,16 +166,20 @@ export function buildPrompt(
     )}、yの範囲は0〜1。`,
     starLines(input),
     "",
-    `構図の印象: ${shapeDescription(input)}（星 ${input.stars.length}個）`,
+    "【形の分析（名前より先に読む）】",
+    shape.summary,
+    `視覚的な手がかり: ${shape.gestures.join(" / ")}`,
+    `名前の着想候補（必要な場合だけ使う）: ${hints}`,
+    `星の数: ${input.stars.length}個`,
     `ユーザーの下書き線: ${sketchLines(input.sketchEdges)}`,
     `線のつながり: ${connectivityDescription(input)}`,
     `ユーザーが添えたことば: ${
       input.theme ? `「${input.theme}」` : "なし"
     }`,
     "",
-    "【モチーフ候補】",
-    motifList,
-    "モチーフの線画は完成した星図の背景に薄く描かれます。星の並びと線のまとまりから自然に連想できるものを選んでください。",
+    "【モチーフ候補（この形との相性順）】",
+    motifLines,
+    "モチーフの線画は完成した星図の背景に、星の広がりに合わせて描かれます。原則としてこの上位候補から、形の読みと理由が説明できるものを選んでください。",
     "",
     "【配色候補】",
     paletteList,
@@ -193,6 +197,7 @@ export function buildPrompt(
     "",
     "【出力JSON】",
     "{",
+    '  "formReading": "横に長く伸びた星々が、右へ緩やかな弧を描いている。左手前ほど星が密で、右下に一つだけ離れた星が残る。",',
     '  "name": "灯待ちの狐座",',
     '  "reading": "ひまちのきつねざ",',
     `  "motif": "上記候補のid (${motifList})",`,

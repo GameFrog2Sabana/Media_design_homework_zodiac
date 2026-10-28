@@ -6,6 +6,7 @@ import {
 import { buildFallback, defaultPaletteForMotif } from "./fallback";
 import { MOTIF_IDS } from "./motifs";
 import { PALETTE_IDS } from "./palettes";
+import { analyzeShape, bestMotifForShape, motifFitScore } from "./shape";
 import type {
   ApiGenerateRequest,
   ApiRateRequest,
@@ -402,16 +403,66 @@ export function coerceConstellationResult(
     }
   }
 
+  // Read the final drawing — the user's lines when present, otherwise the
+  // proposed figure — and let the silhouette gently correct a motif that
+  // clearly contradicts it. A merely unusual motif is left untouched.
+  const analysis = analyzeShape(context.stars, figureEdges, context.aspect);
+  const bestMotif = bestMotifForShape(analysis);
+  let finalMotif = motif || fallback.motif;
+  if (motif) {
+    const fit = motifFitScore(motif, analysis);
+    if (fit <= -1 && bestMotif.score >= 3 && bestMotif.score - fit >= 4) {
+      finalMotif = bestMotif.id;
+      rejectedFields.push("motifShape");
+    }
+  }
+
+  const rawFormReading = clean(source.formReading, 260);
+  const formLength = Array.from(rawFormReading).length;
+  const geometryWords = [
+    "横",
+    "縦",
+    "斜め",
+    "弧",
+    "曲",
+    "輪",
+    "鎖",
+    "枝",
+    "孤立",
+    "離れ",
+    "密集",
+    "密",
+    "広が",
+    "重心",
+    "まとま",
+    "上",
+    "下",
+    "左",
+    "右",
+  ];
+  let formReading = analysis.summary;
+  if (formLength >= 8) {
+    const grounded = geometryWords.some((word) => rawFormReading.includes(word));
+    if (grounded) {
+      formReading = Array.from(rawFormReading).slice(0, 180).join("");
+    } else {
+      rejectedFields.push("formReading");
+    }
+  } else {
+    rejectedFields.push("formReading");
+  }
+
   return {
     result: {
       name,
       reading,
-      motif: motif || fallback.motif,
+      motif: finalMotif,
       paletteId,
       epithet,
       story,
       figureEdges,
       keywords,
+      formReading,
     },
     repaired: rejectedFields.length > 0,
     rejectedFields,

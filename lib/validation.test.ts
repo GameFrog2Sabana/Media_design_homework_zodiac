@@ -134,6 +134,8 @@ describe("coerceConstellationResult", () => {
           [3, 0],
         ],
         keywords: ["灯", "海", "帰り"],
+        formReading:
+          "横に広がる星々が、左上から右下へ緩やかな鎖を描いている。",
       },
       context,
     );
@@ -143,6 +145,72 @@ describe("coerceConstellationResult", () => {
     expect(outcome.repaired).toBe(false);
     // The user's one drawn line wins over the model's four suggested lines.
     expect(outcome.result.figureEdges).toEqual([[0, 1]]);
+  });
+
+  it("fills the shape reading from the drawing when the model omits it", () => {
+    const outcome = coerceConstellationResult(
+      {
+        name: "灯守りの鯨座",
+        reading: "ひもりのくじらざ",
+        motif: "whale",
+        paletteId: "tide",
+        epithet: "夜を渡る星座",
+        story:
+          "遠い海の向こうで、若い鯨が灯りをともしていた。星をたどる者だけが、その帰り道を知っているという。",
+        figureEdges: [[0, 1]],
+        keywords: ["灯", "海", "帰り"],
+      },
+      context,
+    );
+
+    expect(outcome.rejectedFields).toContain("formReading");
+    expect(outcome.result.formReading).toContain("全体は");
+    expect(outcome.result.formReading).toContain("横長");
+  });
+
+  it("softly corrects a motif that clearly contradicts the silhouette", () => {
+    const outcome = coerceConstellationResult(
+      {
+        name: "灯守りの船座",
+        reading: "ひもりのふねざ",
+        motif: "ship",
+        paletteId: "tide",
+        epithet: "夜を渡る星座",
+        story:
+          "遠い海の向こうで、小さな船が灯りをともしていた。星をたどる者だけが、その帰り道を知っているという。",
+        figureEdges: [[0, 1]],
+        keywords: ["灯", "海", "帰り"],
+        formReading:
+          "横に広がる星々が、左上から右下へ緩やかな鎖を描いている。",
+      },
+      context,
+    );
+
+    expect(["whale", "bird", "dragon"]).toContain(outcome.result.motif);
+    expect(outcome.result.motif).not.toBe("ship");
+    expect(outcome.rejectedFields).toContain("motifShape");
+  });
+
+  it("keeps a motif that already suits the silhouette", () => {
+    const outcome = coerceConstellationResult(
+      {
+        name: "灯守りの鯨座",
+        reading: "ひもりのくじらざ",
+        motif: "whale",
+        paletteId: "tide",
+        epithet: "夜を渡る星座",
+        story:
+          "遠い海の向こうで、若い鯨が灯りをともしていた。星をたどる者だけが、その帰り道を知っているという。",
+        figureEdges: [[0, 1]],
+        keywords: ["灯", "海", "帰り"],
+        formReading:
+          "横に広がる星々が、左上から右下へ緩やかな鎖を描いている。",
+      },
+      context,
+    );
+
+    expect(outcome.result.motif).toBe("whale");
+    expect(outcome.rejectedFields).not.toContain("motifShape");
   });
 
   it("keeps disconnected model edges when the user drew nothing", () => {
@@ -160,6 +228,8 @@ describe("coerceConstellationResult", () => {
           [2, 3],
         ],
         keywords: ["灯", "海", "帰り"],
+        formReading:
+          "二つの星のまとまりが左右に離れ、間に余白の星が残っている。",
       },
       { ...context, sketchEdges: [] },
     );
@@ -188,6 +258,8 @@ describe("coerceConstellationResult", () => {
           [3, 0],
         ],
         keywords: ["灯", "海", "帰り"],
+        formReading:
+          "横に広がる星々が、左上から右下へ緩やかな鎖を描いている。",
       },
       context,
     );

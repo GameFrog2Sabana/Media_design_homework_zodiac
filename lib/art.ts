@@ -16,7 +16,8 @@ export interface ArtLayout {
   motif: {
     x: number;
     y: number;
-    scale: number;
+    scaleX: number;
+    scaleY: number;
   };
   /** Deterministic decoration seed. */
   seed: number;
@@ -57,8 +58,38 @@ export function layoutStarMap(
     y: offsetY + (maxY - point.y) * scale,
   }));
 
-  const motifSize = box.size * 0.78;
-  const motifScale = motifSize / 100;
+  // Place the engraved motif over the constellation's actual bounding box
+  // rather than pinning it to the center of the sheet. A long, diagonal or
+  // compact drawing therefore gets artwork with the same proportions.
+  const pointsMinX = Math.min(...points.map((point) => point.x));
+  const pointsMaxX = Math.max(...points.map((point) => point.x));
+  const pointsMinY = Math.min(...points.map((point) => point.y));
+  const pointsMaxY = Math.max(...points.map((point) => point.y));
+  const pointsWidth = Math.max(0, pointsMaxX - pointsMinX);
+  const pointsHeight = Math.max(0, pointsMaxY - pointsMinY);
+  const minMotif = box.size * 0.34;
+  const targetWidth = Math.min(
+    inner,
+    Math.max(minMotif, pointsWidth * 1.34),
+  );
+  const targetHeight = Math.min(
+    inner,
+    Math.max(minMotif, pointsHeight * 1.34),
+  );
+  const pointsCenterX = (pointsMinX + pointsMaxX) / 2;
+  const pointsCenterY = (pointsMinY + pointsMaxY) / 2;
+  const outerMin = box.x + 6;
+  const outerMax = box.x + box.size - 6;
+  const motifX = Math.min(
+    Math.max(pointsCenterX - targetWidth / 2, outerMin),
+    outerMax - targetWidth,
+  );
+  const motifY = Math.min(
+    Math.max(pointsCenterY - targetHeight / 2, outerMin),
+    outerMax - targetHeight,
+  );
+  const scaleX = targetWidth / 100;
+  const scaleY = targetHeight / 100;
 
   return {
     points,
@@ -68,9 +99,10 @@ export function layoutStarMap(
     },
     chartRadius: box.size * 0.455,
     motif: {
-      x: box.x + (box.size - motifSize) / 2,
-      y: box.y + (box.size - motifSize) / 2,
-      scale: motifScale,
+      x: motifX,
+      y: motifY,
+      scaleX,
+      scaleY,
     },
     seed: hashString(
       seedKey ||
