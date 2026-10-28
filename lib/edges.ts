@@ -34,6 +34,21 @@ export function edgeKey(edge: FigureEdge): string {
   return `${Math.min(edge[0], edge[1])}-${Math.max(edge[0], edge[1])}`;
 }
 
+/**
+ * Compare two figures as undirected segment sets. Endpoint order and input
+ * order do not matter; a missing, extra or re-routed segment does.
+ */
+export function sameEdgeSet(a: FigureEdge[], b: FigureEdge[]): boolean {
+  if (a.length !== b.length) return false;
+  const left = new Set(a.map(edgeKey));
+  const right = new Set(b.map(edgeKey));
+  if (left.size !== right.size) return false;
+  for (const key of left) {
+    if (!right.has(key)) return false;
+  }
+  return true;
+}
+
 export function mstEdges(points: Point[]): FigureEdge[] {
   if (points.length < 2) return [];
 

@@ -5,6 +5,7 @@ import {
   mstEdges,
   normalizeEdgePairs,
   repairFigureEdges,
+  sameEdgeSet,
 } from "@/lib/edges";
 import type { FigureEdge, Point } from "@/lib/types";
 
@@ -60,6 +61,41 @@ describe("normalizeEdgePairs", () => {
 
   it("returns an empty array for non-array input", () => {
     expect(normalizeEdgePairs(null, 5)).toEqual([]);
+  });
+
+  it("keeps every one of the 60 accepted segments", () => {
+    const drawn: FigureEdge[] = [];
+    for (let a = 0; a < 16 && drawn.length < 60; a += 1) {
+      for (let b = a + 1; b < 16 && drawn.length < 60; b += 1) {
+        drawn.push([b, a]);
+      }
+    }
+    const normalized = normalizeEdgePairs(drawn, 16);
+    expect(normalized).toHaveLength(60);
+    expect(sameEdgeSet(normalized, drawn)).toBe(true);
+  });
+});
+
+describe("sameEdgeSet", () => {
+  it("ignores endpoint and input order", () => {
+    expect(
+      sameEdgeSet(
+        [
+          [0, 1],
+          [2, 3],
+        ],
+        [
+          [3, 2],
+          [1, 0],
+        ],
+      ),
+    ).toBe(true);
+  });
+
+  it("detects missing, extra and re-routed segments", () => {
+    expect(sameEdgeSet([[0, 1]], [[0, 1], [1, 2]])).toBe(false);
+    expect(sameEdgeSet([[0, 1]], [[0, 2]])).toBe(false);
+    expect(sameEdgeSet([[0, 1], [1, 2]], [[0, 1], [2, 3]])).toBe(false);
   });
 });
 

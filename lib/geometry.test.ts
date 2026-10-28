@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { normalizeEdgePairs } from "@/lib/edges";
+import { normalizeEdgePairs, sameEdgeSet } from "@/lib/edges";
 import { buildFallback } from "@/lib/fallback";
-import { generateDefaultStars, screenToStar, starToScreen } from "@/lib/geometry";
+import {
+  edgesToIndices,
+  generateDefaultStars,
+  screenToStar,
+  starToScreen,
+} from "@/lib/geometry";
 import { MOTIF_IDS } from "@/lib/motifs";
 import { PALETTE_IDS } from "@/lib/palettes";
 
@@ -42,6 +47,29 @@ describe("stage coordinate conversion", () => {
   it("clamps points outside the stage", () => {
     expect(screenToStar({ x: 0, y: 0 }, stage)).toEqual({ x: 0, y: 0 });
     expect(screenToStar({ x: 5000, y: 5000 }, stage)).toEqual({ x: 1, y: 1 });
+  });
+});
+
+describe("edgesToIndices", () => {
+  const placed = [
+    { id: "star-c", x: 0.2, y: 0.3 },
+    { id: "star-a", x: 0.6, y: 0.2 },
+    { id: "star-b", x: 0.8, y: 0.7 },
+  ];
+
+  it("maps every editor edge by star id without changing its endpoints", () => {
+    expect(
+      edgesToIndices(
+        [
+          { a: "star-c", b: "star-a" },
+          { a: "star-a", b: "star-b" },
+        ],
+        placed,
+      ),
+    ).toEqual([
+      [0, 1],
+      [1, 2],
+    ]);
   });
 });
 
@@ -98,6 +126,50 @@ describe("buildFallback", () => {
     expect(result.name.endsWith("座")).toBe(true);
     expect(Array.from(result.name).length).toBeLessThanOrEqual(12);
     expect(result.story.length).toBeGreaterThan(30);
+  });
+
+  it("keeps all 60 drawn segments without adding a connecting line", () => {
+    const placed = Array.from({ length: 16 }, (_, index) => ({
+      x: 0.05 + (index % 4) * 0.3,
+      y: 0.05 + Math.floor(index / 4) * 0.3,
+    }));
+    const drawn: [number, number][] = [];
+    for (let a = 0; a < 16 && drawn.length < 60; a += 1) {
+      for (let b = a + 1; b < 16 && drawn.length < 60; b += 1) {
+        drawn.push([a, b]);
+      }
+    }
+
+    const result = buildFallback({
+      ...input,
+      stars: placed,
+      sketchEdges: drawn,
+    });
+
+    expect(result.figureEdges).toHaveLength(60);
+    expect(sameEdgeSet(result.figureEdges, drawn)).toBe(true);
+  });
+
+  it("does not truncate a direct sketch either", () => {
+    const placed = Array.from({ length: 16 }, (_, index) => ({
+      x: 0.05 + (index % 4) * 0.3,
+      y: 0.05 + Math.floor(index / 4) * 0.3,
+    }));
+    const drawn: [number, number][] = [];
+    for (let a = 0; a < 16 && drawn.length < 61; a += 1) {
+      for (let b = a + 1; b < 16 && drawn.length < 61; b += 1) {
+        drawn.push([a, b]);
+      }
+    }
+
+    const result = buildFallback({
+      ...input,
+      stars: placed,
+      sketchEdges: drawn,
+    });
+
+    expect(result.figureEdges).toHaveLength(61);
+    expect(sameEdgeSet(result.figureEdges, drawn)).toBe(true);
   });
 
   it("picks a sea motif for a lighthouse theme", () => {

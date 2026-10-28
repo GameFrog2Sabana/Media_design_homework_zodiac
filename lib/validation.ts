@@ -226,7 +226,7 @@ function parseEdges(raw: unknown, starCount: number): FigureEdge[] {
     throw new ValidationError("線分が多すぎます。");
   }
   const edges = normalizeEdgePairs(raw, starCount);
-  if (edges.length > 60) {
+  if (edges.length > MAX_FIGURE_EDGES) {
     throw new ValidationError("線分が多すぎます。");
   }
   return edges;
@@ -385,11 +385,12 @@ export function coerceConstellationResult(
 
   // The hand-drawn figure is the composition, not a suggestion. If the user
   // drew lines, every one of them is kept exactly as drawn, including
-  // separate groups and stars that were left untouched.
+  // separate groups and stars that were left untouched. The public endpoint
+  // enforces the 60-line limit explicitly; this layer never truncates silently.
   const sketchEdges = normalizeEdgePairs(
     context.sketchEdges,
     context.stars.length,
-  ).slice(0, MAX_FIGURE_EDGES);
+  );
   let figureEdges: FigureEdge[];
   if (sketchEdges.length > 0) {
     figureEdges = sketchEdges;

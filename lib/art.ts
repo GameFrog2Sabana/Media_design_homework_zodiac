@@ -24,8 +24,12 @@ export interface ArtLayout {
 }
 
 /**
- * Fit the normalized constellation into a square artwork area while keeping
- * the on-screen aspect ratio (so a wide drawing remains wide).
+ * Map the normalized stage onto a square artwork area. The full stage is
+ * scaled uniformly and letterboxed, so a star's position relative to the
+ * original frame, every distance between stars, and the drawing's orientation
+ * are preserved. We deliberately do not re-fit the bounding box: a constellation
+ * drawn in the upper-left stays in the upper-left instead of being recentered
+ * and enlarged.
  */
 export function layoutStarMap(
   stars: Point[],
@@ -35,27 +39,20 @@ export function layoutStarMap(
 ): ArtLayout {
   const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
   const inner = Math.max(1, box.size - box.padding * 2);
-  const world = stars.map((star) => ({
-    x: star.x * safeAspect,
-    y: 1 - star.y,
-  }));
+  const stageWidth = Math.max(0.001, safeAspect);
+  const stageHeight = 1;
+  const scale = inner / Math.max(stageWidth, stageHeight);
+  const drawnWidth = stageWidth * scale;
+  const drawnHeight = stageHeight * scale;
 
-  const xs = world.map((point) => point.x);
-  const ys = world.map((point) => point.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const width = Math.max(0.001, maxX - minX);
-  const height = Math.max(0.001, maxY - minY);
-  const scale = inner / Math.max(width, height);
+  const offsetX = box.x + box.padding + (inner - drawnWidth) / 2;
+  const offsetY = box.y + box.padding + (inner - drawnHeight) / 2;
 
-  const offsetX = box.x + box.padding + (inner - width * scale) / 2;
-  const offsetY = box.y + box.padding + (inner - height * scale) / 2;
-
-  const points = world.map((point) => ({
-    x: offsetX + (point.x - minX) * scale,
-    y: offsetY + (maxY - point.y) * scale,
+  // Stage coordinates are already y-down, like SVG. A uniform scale plus a
+  // single translation is the only transform applied to the user's points.
+  const points = stars.map((star) => ({
+    x: offsetX + star.x * drawnWidth,
+    y: offsetY + star.y * drawnHeight,
   }));
 
   // Place the engraved motif over the constellation's actual bounding box

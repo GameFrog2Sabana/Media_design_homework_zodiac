@@ -19,6 +19,7 @@ import {
   updateGalleryRating,
 } from "@/lib/client-storage";
 import { buildFallback } from "@/lib/fallback";
+import { MAX_FIGURE_EDGES, sameEdgeSet } from "@/lib/edges";
 import {
   clamp,
   edgesToIndices,
@@ -60,7 +61,7 @@ interface ToastState {
 
 const MAX_STARS = 16;
 const MIN_STARS = 3;
-const MAX_EDGES = 60;
+const MAX_EDGES = MAX_FIGURE_EDGES;
 
 const TOOL_HINTS: Record<Tool, string> = {
   move: "星をつかんで、好きな場所へ",
@@ -470,6 +471,22 @@ export default function ConstellationApp() {
     }
 
     if (!response) return;
+
+    // The hand-drawn figure is authoritative. The server already enforces this,
+    // but keep a second guard at the display boundary so an older deployment,
+    // proxy, or model regression can never re-route the user's lines.
+    if (sketch.length > 0 && !sameEdgeSet(response.result.figureEdges, sketch)) {
+      console.warn(
+        "Generated figureEdges differed from the sketch; restoring the hand-drawn lines.",
+      );
+      response = {
+        ...response,
+        result: {
+          ...response.result,
+          figureEdges: sketch,
+        },
+      };
+    }
 
     const item: GalleryItem = {
       id: response.id,

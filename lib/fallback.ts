@@ -1,5 +1,4 @@
 import {
-  MAX_FIGURE_EDGES,
   analyzeSketch,
   augmentEdges,
   mstEdges,
@@ -413,10 +412,7 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
   );
   const rng = mulberry32(seed);
 
-  const sketch = normalizeEdgePairs(input.sketchEdges ?? [], stars.length).slice(
-    0,
-    MAX_FIGURE_EDGES,
-  );
+  const sketch = normalizeEdgePairs(input.sketchEdges ?? [], stars.length);
   const topology = analyzeSketch(sketch, stars.length);
   const figureEdges =
     sketch.length > 0

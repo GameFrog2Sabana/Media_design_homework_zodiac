@@ -69,4 +69,63 @@ describe("layoutStarMap motif placement", () => {
     expect(motifCenterX).toBeCloseTo(centerX, 5);
     expect(motifCenterY).toBeCloseTo(centerY, 5);
   });
+
+  it("maps the full stage without recentering the drawing", () => {
+    const layout = layoutStarMap(
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      2,
+      box,
+      "frame",
+    );
+    const inner = box.size - box.padding * 2;
+    const scale = inner / 2;
+    const offsetY = box.y + box.padding + (inner - scale) / 2;
+    expect(layout.points[0].x).toBeCloseTo(box.x + box.padding, 6);
+    expect(layout.points[0].y).toBeCloseTo(offsetY, 6);
+    expect(layout.points[1].x).toBeCloseTo(box.x + box.padding + inner, 6);
+    expect(layout.points[1].y).toBeCloseTo(offsetY + scale, 6);
+  });
+
+  it("keeps a corner cluster in the same corner", () => {
+    const layout = layoutStarMap(
+      [
+        { x: 0.1, y: 0.1 },
+        { x: 0.2, y: 0.15 },
+      ],
+      1,
+      box,
+      "corner",
+    );
+    const centerX =
+      layout.points.reduce((sum, point) => sum + point.x, 0) /
+      layout.points.length;
+    const centerY =
+      layout.points.reduce((sum, point) => sum + point.y, 0) /
+      layout.points.length;
+    expect(centerX).toBeLessThan(box.x + box.size / 2);
+    expect(centerY).toBeLessThan(box.y + box.size / 2);
+  });
+
+  it("applies one uniform scale to every distance", () => {
+    const source = [
+      { x: 0.1, y: 0.2 },
+      { x: 0.7, y: 0.8 },
+    ];
+    const aspect = 1.6;
+    const layout = layoutStarMap(source, aspect, box, "distance");
+    const sourceDistance = Math.hypot(
+      (source[1].x - source[0].x) * aspect,
+      source[1].y - source[0].y,
+    );
+    const layoutDistance = Math.hypot(
+      layout.points[1].x - layout.points[0].x,
+      layout.points[1].y - layout.points[0].y,
+    );
+    const expectedScale =
+      (box.size - box.padding * 2) / Math.max(aspect, 1);
+    expect(layoutDistance / sourceDistance).toBeCloseTo(expectedScale, 6);
+  });
 });

@@ -8,6 +8,7 @@ import {
   parseRateRequest,
   ValidationError,
 } from "@/lib/validation";
+import { sameEdgeSet } from "@/lib/edges";
 import type { ApiGenerateRequest } from "@/lib/types";
 
 const stars = [
@@ -28,6 +29,23 @@ function validBody(overrides: Partial<ApiGenerateRequest> = {}) {
     attempt: 1,
     ...overrides,
   };
+}
+
+function manyStars(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    x: 0.06 + (index % 4) * 0.29,
+    y: 0.06 + Math.floor(index / 4) * 0.29,
+  }));
+}
+
+function manyEdges(starCount: number, count: number): [number, number][] {
+  const edges: [number, number][] = [];
+  for (let a = 0; a < starCount && edges.length < count; a += 1) {
+    for (let b = a + 1; b < starCount && edges.length < count; b += 1) {
+      edges.push([a, b]);
+    }
+  }
+  return edges;
 }
 
 describe("parseGenerateRequest", () => {
@@ -68,6 +86,23 @@ describe("parseGenerateRequest", () => {
     );
     expect(parsed.theme).not.toContain("<");
     expect(Array.from(parsed.theme).length).toBeLessThanOrEqual(60);
+  });
+
+  it("passes the user's star coordinates through unchanged", () => {
+    const placed = manyStars(16);
+    const parsed = parseGenerateRequest(
+      validBody({ stars: placed, edges: manyEdges(16, 60) }),
+    );
+    expect(parsed.stars).toEqual(placed);
+    expect(parsed.edges).toHaveLength(60);
+  });
+
+  it("rejects the 61st line instead of silently dropping it", () => {
+    expect(() =>
+      parseGenerateRequest(
+        validBody({ stars: manyStars(16), edges: manyEdges(16, 61) }),
+      ),
+    ).toThrow(ValidationError);
   });
 });
 
@@ -117,6 +152,22 @@ describe("coerceConstellationResult", () => {
     attempt: 1,
   };
 
+  function validModel(figureEdges: [number, number][]) {
+    return {
+      name: "灯守りの鯨座",
+      reading: "ひもりのくじらざ",
+      motif: "whale",
+      paletteId: "tide",
+      epithet: "夜を渡る星座",
+      story:
+        "遠い海の向こうで、若い鯨が灯りをともしていた。星をたどる者だけが、その帰り道を知っているという。",
+      figureEdges,
+      keywords: ["灯", "海", "帰り"],
+      formReading:
+        "横に広がる星々が、左上から右下へ緩やかな鎖を描いている。",
+    };
+  }
+
   it("keeps a valid model result", () => {
     const outcome = coerceConstellationResult(
       {
@@ -145,6 +196,76 @@ describe("coerceConstellationResult", () => {
     expect(outcome.repaired).toBe(false);
     // The user's one drawn line wins over the model's four suggested lines.
     expect(outcome.result.figureEdges).toEqual([[0, 1]]);
+  });
+
+  it("keeps a ring, a branch and a separate part exactly as drawn", () => {
+    const drawnStars = manyStars(9);
+    const drawn: [number, number][] = [
+      [1, 0],
+      [1, 2],
+      [2, 0],
+      [2, 3],
+      [3, 4],
+      [4, 5],
+      [5, 3],
+      [6, 7],
+    ];
+    const outcome = coerceConstellationResult(validModel([[0, 1], [1, 2]]), {
+      stars: drawnStars,
+      sketchEdges: drawn,
+      aspect: 1.6,
+      theme: "灯台",
+      attempt: 1,
+    });
+
+    expect(outcome.result.figureEdges).toEqual([
+      [0, 1],
+      [1, 2],
+      [0, 2],
+      [2, 3],
+      [3, 4],
+      [4, 5],
+      [3, 5],
+      [6, 7],
+    ]);
+    expect(outcome.result.figureEdges).toHaveLength(drawn.length);
+  });
+
+  it("keeps all 60 drawn segments and does not mutate the input", () => {
+    const drawnStars = manyStars(16);
+    const drawn = manyEdges(16, 60).map(
+      ([a, b], index): [number, number] => (index % 2 === 0 ? [b, a] : [a, b]),
+    );
+    const starsSnapshot = structuredClone(drawnStars);
+    const edgesSnapshot = structuredClone(drawn);
+
+    const outcome = coerceConstellationResult(validModel([[0, 1]]), {
+      stars: drawnStars,
+      sketchEdges: drawn,
+      aspect: 1.6,
+      theme: "灯台",
+      attempt: 1,
+    });
+
+    expect(outcome.result.figureEdges).toHaveLength(60);
+    expect(sameEdgeSet(outcome.result.figureEdges, drawn)).toBe(true);
+    expect(drawnStars).toEqual(starsSnapshot);
+    expect(drawn).toEqual(edgesSnapshot);
+  });
+
+  it("never truncates a sketch inside the generator", () => {
+    const drawnStars = manyStars(16);
+    const drawn = manyEdges(16, 61);
+    const outcome = coerceConstellationResult(validModel([[0, 1]]), {
+      stars: drawnStars,
+      sketchEdges: drawn,
+      aspect: 1.6,
+      theme: "灯台",
+      attempt: 1,
+    });
+
+    expect(outcome.result.figureEdges).toHaveLength(61);
+    expect(sameEdgeSet(outcome.result.figureEdges, drawn)).toBe(true);
   });
 
   it("fills the shape reading from the drawing when the model omits it", () => {

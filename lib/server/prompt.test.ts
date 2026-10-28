@@ -37,6 +37,7 @@ describe("buildPrompt", () => {
 
     expect(text).toContain("その線を一本も欠かさず");
     expect(text).toContain("2個のまとまり");
+    expect(text).toContain("S0–S1、S2–S3");
     expect(text).toContain("線に含まれない星: S4");
     expect(text).toContain("閉路は必須ではない");
     expect(text).toContain("複数パーツなら");
