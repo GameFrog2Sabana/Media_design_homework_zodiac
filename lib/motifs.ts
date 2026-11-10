@@ -6,6 +6,14 @@ export interface Motif {
   reading: string;
   /** A poetic noun used by the offline generator. */
   subject: string;
+  /**
+   * Angle of the artwork's long axis inside the 0 0 100 100 viewBox, in SVG
+   * degrees (clockwise from +x). The renderer rotates the drawing by this
+   * much less than the constellation's own principal axis, so the engraved
+   * figure actually follows the user's stars instead of sitting upright in a
+   * generic frame.
+   */
+  axisAngle: number;
   /** Inline SVG path data in a 0 0 100 100 viewBox. */
   paths: string[];
 }
@@ -22,6 +30,7 @@ export const MOTIFS: Motif[] = [
     label: "鯨",
     reading: "くじら",
     subject: "若い鯨",
+    axisAngle: 0,
     paths: [
       "M12 57 C20 43 36 33 55 34 C70 35 82 43 83 53 C83 60 77 64 69 64 L45 64 C33 64 22 61 15 58",
       "M83 50 C88 42 93 34 92 24 C88 31 82 38 74 43",
@@ -35,6 +44,7 @@ export const MOTIFS: Motif[] = [
     label: "狐",
     reading: "きつね",
     subject: "白い狐",
+    axisAngle: 0,
     paths: [
       "M22 44 L18 20 L36 34 C40 32 45 31 50 31 C55 31 60 32 64 34 L82 20 L78 45 C82 51 84 58 80 66 C73 77 60 82 50 82 C40 82 27 77 20 66 C16 58 18 51 22 44 Z",
       "M37 51 L37 57",
@@ -50,6 +60,7 @@ export const MOTIFS: Motif[] = [
     label: "龍",
     reading: "りゅう",
     subject: "古い龍",
+    axisAngle: 0,
     paths: [
       "M16 78 C28 70 22 57 34 48 C43 41 52 49 46 57 C41 64 47 72 56 68 C66 64 64 52 72 46 C80 40 86 44 86 52",
       "M72 46 C76 40 84 38 88 42 C91 46 88 52 82 52 C80 55 76 57 72 55",
@@ -66,6 +77,7 @@ export const MOTIFS: Motif[] = [
     label: "鳥",
     reading: "とり",
     subject: "一羽の鳥",
+    axisAngle: 0,
     paths: [
       "M10 55 C24 39 38 34 51 41 C58 34 68 32 76 35 C84 38 89 45 90 51 C80 48 72 49 64 54 C55 60 45 63 35 61 C26 59 17 57 10 55 Z",
       "M51 41 C53 45 52 50 48 54",
@@ -79,6 +91,7 @@ export const MOTIFS: Motif[] = [
     label: "花",
     reading: "はな",
     subject: "名もない花",
+    axisAngle: 90,
     paths: [
       "M50 46 C41 25 46 12 58 14 C68 16 66 32 50 46",
       "M54 48 C70 30 82 32 88 42 C93 52 76 60 54 48",
@@ -96,6 +109,7 @@ export const MOTIFS: Motif[] = [
     label: "冠",
     reading: "かんむり",
     subject: "小さな冠",
+    axisAngle: 0,
     paths: [
       "M16 74 L16 34 L33 50 L50 24 L67 50 L84 34 L84 74 Z",
       "M25 67 L75 67",
@@ -110,6 +124,7 @@ export const MOTIFS: Motif[] = [
     label: "舟",
     reading: "ふね",
     subject: "一艘の舟",
+    axisAngle: 90,
     paths: [
       "M17 68 C30 79 70 79 83 68 C76 63 67 61 58 63 L40 63 C32 61 24 63 17 68 Z",
       "M50 22 L50 64",
@@ -124,6 +139,7 @@ export const MOTIFS: Motif[] = [
     label: "鹿",
     reading: "しか",
     subject: "若い鹿",
+    axisAngle: 90,
     paths: [
       "M38 35 L32 21 L43 29 C46 27 54 27 58 29 L68 21 L62 37 C68 45 68 54 62 61 L58 78 L42 78 L38 61 C32 54 32 45 38 35 Z",
       "M42 29 C36 21 34 14 37 8",
@@ -146,6 +162,7 @@ export const MOTIFS: Motif[] = [
     label: "灯",
     reading: "あかり",
     subject: "ひとつの灯",
+    axisAngle: 90,
     paths: [
       "M50 8 L50 22",
       "M38 26 L62 26 L58 32 L42 32 Z",
@@ -162,6 +179,7 @@ export const MOTIFS: Motif[] = [
     label: "鍵",
     reading: "かぎ",
     subject: "錆びた鍵",
+    axisAngle: 55,
     paths: [
       "M32 18 a14 14 0 1 0 0.1 0",
       "M32 26 a6 6 0 1 0 0.1 0",
@@ -177,6 +195,7 @@ export const MOTIFS: Motif[] = [
     label: "月",
     reading: "つき",
     subject: "細い月",
+    axisAngle: 90,
     paths: [
       "M63 15 C39 20 23 38 23 58 C23 76 37 89 55 89 C40 80 32 66 34 52 C36 38 46 24 63 15 Z",
       "M72 28 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 Z",
@@ -189,6 +208,7 @@ export const MOTIFS: Motif[] = [
     label: "猫",
     reading: "ねこ",
     subject: "黒い猫",
+    axisAngle: 90,
     paths: [
       "M26 52 C24 42 29 32 38 28 L34 14 L48 24 C50 24 54 24 56 24 L70 14 L66 29 C76 33 80 43 77 53 C73 67 62 74 51 74 C40 74 30 67 26 52 Z",
       "M39 38 C41 42 44 43 47 40",
@@ -208,6 +228,7 @@ export const MOTIFS: Motif[] = [
     label: "蝶",
     reading: "ちょう",
     subject: "一匹の蝶",
+    axisAngle: 0,
     paths: [
       "M50 34 L50 74",
       "M50 42 C40 23 22 19 16 31 C10 43 26 54 48 51",
@@ -227,6 +248,7 @@ export const MOTIFS: Motif[] = [
     label: "山",
     reading: "やま",
     subject: "遠い山",
+    axisAngle: 0,
     paths: [
       "M9 81 L36 34 L52 62 L64 44 L91 81 Z",
       "M29 47 L36 34 L43 47 L39 43 L36 48 L33 43 Z",
@@ -240,6 +262,7 @@ export const MOTIFS: Motif[] = [
     label: "魚",
     reading: "さかな",
     subject: "銀の魚",
+    axisAngle: 0,
     paths: [
       "M20 50 C31 33 55 28 72 38 C80 43 85 49 88 50 C85 51 80 57 72 62 C55 72 31 67 20 50 Z",
       "M20 50 C14 43 9 37 8 30 C16 35 23 42 25 48",
@@ -255,6 +278,7 @@ export const MOTIFS: Motif[] = [
     label: "眼",
     reading: "まなこ",
     subject: "澄んだ眼",
+    axisAngle: 0,
     paths: [
       "M12 50 C26 30 42 24 50 24 C58 24 74 30 88 50 C74 70 58 76 50 76 C42 76 26 70 12 50 Z",
       "M50 50 m-14 0 a14 14 0 1 0 28 0 a14 14 0 1 0 -28 0",

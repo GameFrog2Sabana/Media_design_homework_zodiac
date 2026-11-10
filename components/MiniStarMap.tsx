@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { decorativeStars, layoutStarMap } from "@/lib/art";
+import { decorativeStars, layoutStarMap, motifTransform } from "@/lib/art";
 import { getMotif } from "@/lib/motifs";
 import { getPalette } from "@/lib/palettes";
 import type { FigureEdge, Point } from "@/lib/types";
@@ -32,7 +32,7 @@ export default function MiniStarMap({
   const palette = getPalette(paletteId);
   const motifArt = getMotif(motif);
   const box = { x: 18, y: 18, size: 324, padding: 42 };
-  const layout = layoutStarMap(stars, aspect, box, seedKey);
+  const layout = layoutStarMap(stars, aspect, box, seedKey, figureEdges, motif);
   const dust = decorativeStars(box, layout.seed + 11, compact ? 26 : 46);
 
   return (
@@ -92,20 +92,41 @@ export default function MiniStarMap({
           />
         ))}
 
-        <g
-          transform={`translate(${layout.motif.x} ${layout.motif.y}) scale(${layout.motif.scaleX} ${layout.motif.scaleY})`}
-          fill="none"
-          stroke={palette.primary}
-          strokeWidth="0.9"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity="0.24"
-          vectorEffect="non-scaling-stroke"
-        >
-          {motifArt.paths.map((path, index) => (
-            <path key={index} d={path} vectorEffect="non-scaling-stroke" />
-          ))}
-        </g>
+        {layout.motifs.map((placement, placementIndex) => (
+          <g
+            key={`m-${placementIndex}`}
+            transform={motifTransform(placement)}
+            fill="none"
+            stroke={palette.primary}
+            strokeWidth="0.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.24 * placement.opacity}
+            vectorEffect="non-scaling-stroke"
+          >
+            {motifArt.paths.map((path, index) => (
+              <path key={index} d={path} vectorEffect="non-scaling-stroke" />
+            ))}
+          </g>
+        ))}
+
+        {layout.isolated.map((index) => {
+          const point = layout.points[index];
+          if (!point) return null;
+          return (
+            <circle
+              key={`i-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r="5.8"
+              fill="none"
+              stroke={palette.primary}
+              strokeWidth="0.7"
+              strokeDasharray="1.2 3.4"
+              opacity="0.38"
+            />
+          );
+        })}
 
         {figureEdges.map(([a, b], index) => {
           const start = layout.points[a];

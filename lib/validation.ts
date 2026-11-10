@@ -1,12 +1,12 @@
 import {
   MAX_FIGURE_EDGES,
   normalizeEdgePairs,
-  repairFigureEdges,
+  sameEdgeSet,
 } from "./edges";
 import { buildFallback, defaultPaletteForMotif } from "./fallback";
 import { MOTIF_IDS } from "./motifs";
 import { PALETTE_IDS } from "./palettes";
-import { analyzeShape, bestMotifForShape, motifFitScore } from "./shape";
+import { analyzeShape, bestMotifForShape } from "./shape";
 import type {
   ApiGenerateRequest,
   ApiRateRequest,
@@ -383,36 +383,45 @@ export function coerceConstellationResult(
   const keywords = rawKeywords.length > 0 ? rawKeywords : fallback.keywords;
   if (rawKeywords.length === 0) rejectedFields.push("keywords");
 
-  // The hand-drawn figure is the composition, not a suggestion. If the user
-  // drew lines, every one of them is kept exactly as drawn, including
-  // separate groups and stars that were left untouched. The public endpoint
-  // enforces the 60-line limit explicitly; this layer never truncates silently.
+  // The hand-drawn figure is the composition, not a suggestion. Every segment
+  // is kept exactly as drawn, including separate groups and stars that were
+  // left untouched. When nothing was drawn the figure stays empty: the model
+  // is never allowed to invent connections between unconnected stars. The
+  // public endpoint enforces the 60-line limit explicitly; this layer never
+  // truncates silently.
   const sketchEdges = normalizeEdgePairs(
     context.sketchEdges,
     context.stars.length,
   );
-  let figureEdges: FigureEdge[];
-  if (sketchEdges.length > 0) {
-    figureEdges = sketchEdges;
-  } else {
-    const repairedEdges = repairFigureEdges(source.figureEdges, context.stars);
-    if (repairedEdges) {
-      figureEdges = repairedEdges;
-    } else {
-      figureEdges = fallback.figureEdges;
-      rejectedFields.push("figureEdges");
-    }
+  const figureEdges: FigureEdge[] = sketchEdges;
+  const modelEdges = normalizeEdgePairs(source.figureEdges, context.stars.length);
+  if (!sameEdgeSet(modelEdges, sketchEdges)) {
+    rejectedFields.push("figureEdges");
   }
 
-  // Read the final drawing — the user's lines when present, otherwise the
-  // proposed figure — and let the silhouette gently correct a motif that
-  // clearly contradicts it. A merely unusual motif is left untouched.
+  // Read the final drawing and require the motif to fit the actual silhouette.
+  // A merely unusual motif is still allowed when it sits near the top of the
+  // shape ranking, but a clearly contradicting motif is replaced by the best
+  // shape-grounded candidate.
   const analysis = analyzeShape(context.stars, figureEdges, context.aspect);
   const bestMotif = bestMotifForShape(analysis);
   let finalMotif = motif || fallback.motif;
   if (motif) {
-    const fit = motifFitScore(motif, analysis);
-    if (fit <= -1 && bestMotif.score >= 3 && bestMotif.score - fit >= 4) {
+    const rankIndex = analysis.motifMatches.findIndex(
+      (candidate) => candidate.id === motif,
+    );
+    const fit = rankIndex >= 0 ? analysis.motifMatches[rankIndex].score : -99;
+    const directional =
+      analysis.orientation === "horizontal" ||
+      analysis.orientation === "vertical" ||
+      analysis.orientation === "diagonal";
+    const allowedGap = directional ? 1 : 2;
+    const acceptable =
+      rankIndex >= 0 &&
+      rankIndex < 4 &&
+      fit >= bestMotif.score - allowedGap &&
+      fit >= 1;
+    if (!acceptable) {
       finalMotif = bestMotif.id;
       rejectedFields.push("motifShape");
     }
@@ -441,10 +450,20 @@ export function coerceConstellationResult(
     "左",
     "右",
   ];
+  const orientationWords: Record<string, string[]> = {
+    horizontal: ["横", "幅", "左右", "水平"],
+    vertical: ["縦", "高さ", "上下", "垂直"],
+    diagonal: ["斜め", "斜行", "右上", "右下", "対角"],
+    compact: ["小さ", "まとま", "密集", "寄", "巣"],
+    balanced: ["横", "縦", "均衡", "まとま", "広が", "中央"],
+  };
+  const mentionsShape = (orientationWords[analysis.orientation] ?? []).some(
+    (word) => rawFormReading.includes(word),
+  );
   let formReading = analysis.summary;
   if (formLength >= 8) {
     const grounded = geometryWords.some((word) => rawFormReading.includes(word));
-    if (grounded) {
+    if (grounded && mentionsShape) {
       formReading = Array.from(rawFormReading).slice(0, 180).join("");
     } else {
       rejectedFields.push("formReading");

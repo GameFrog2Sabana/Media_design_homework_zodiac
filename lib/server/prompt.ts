@@ -1,10 +1,7 @@
 import type { FigureEdge, Point } from "@/lib/types";
 import { PALETTES } from "@/lib/palettes";
 import { analyzeShape, shapeNameHints } from "@/lib/shape";
-import type {
-  CreativityGuardrails,
-  CreativityVariant,
-} from "./creativity";
+import type { CreativityVariant } from "./creativity";
 
 export interface PromptInput {
   stars: Point[];
@@ -31,6 +28,13 @@ function starLines(input: PromptInput): string {
 function sketchLines(edges: FigureEdge[]): string {
   if (edges.length === 0) return "なし（ユーザーはまだ線を引いていない）";
   return edges.map(([a, b]) => `S${a}–S${b}`).join("、");
+}
+
+function axisDescription(angleDeg: number): string {
+  const rounded = Math.round(Math.abs(angleDeg));
+  if (rounded <= 4) return "ほぼ水平（0°）";
+  if (rounded >= 86) return "ほぼ垂直（90°）";
+  return angleDeg > 0 ? `右上がり 約${rounded}°` : `右下がり 約${rounded}°`;
 }
 
 /**
@@ -109,7 +113,6 @@ function connectivityDescription(input: PromptInput): string {
 export function buildPrompt(
   input: PromptInput,
   variant: CreativityVariant,
-  guardrails: CreativityGuardrails,
 ): ChatMessage[] {
   const shape = analyzeShape(input.stars, input.sketchEdges, input.aspect);
   const motifMatches = shape.motifMatches.slice(0, 7);
@@ -146,12 +149,12 @@ export function buildPrompt(
     "・formReading に書いた形と、name・motif・epithet・story を必ず響き合わせる。形を無視した既製の星座名や絵柄を選ばない。",
     "・name は2〜12文字で、必ず「〜座」で終わる。実在の星座名（「〜座」を含む）は使わない。",
     "・reading は name のひらがな読み。ひらがなのみ（長音「ー」可）で、末尾は「ざ」。",
-    "・ユーザーの下書き線がある場合、figureEdges はその線を一本も欠かさず、同じ星番号のペアでそのまま返す。追加・削除・張り替えをしてはいけない。",
-    "・下書き線がない場合のみ、figureEdges を2〜9本で提案してよい。",
+    "・figureEdges は、ユーザーの下書き線と完全に同じ配列にする。線を追加・削除・連結・張り替えしてはいけない。",
+    "・下書き線がない場合、figureEdges は必ず空配列 [] にする。星を勝手に結ばない。",
     "・星座は連結である必要はなく、閉路も不要。複数のまとまりや、線に含まれない星があってよい。",
-    "・name・epithet・story は、線のまとまりの数、輪・鎖・枝分かれ、孤立した星を読み取って発想する。複数パーツなら、その離れ方や群れを名前と神話に織り込む。",
-    "・figureEdges はモチーフの輪郭を感じさせる形にすること。ただし下書き線がある場合は形を変えず、モチーフの選び方で響き合わせる。",
-    "・motif は、形との相性が上位の候補から選ぶ。複数パーツなら群れ・渡り・島影・遠い灯りを感じさせるものを優先する。",
+    "・name・epithet・story は、星の配置、線のまとまりの数、輪・鎖・枝分かれ、孤立した星を読み取って発想する。複数パーツなら、その離れ方や群れを名前と神話に織り込む。",
+    "・figureEdges はモチーフの輪郭ではなく、ユーザーが引いた線そのもの。モチーフは、その線の主軸・曲がり・まとまりに沿うものを選ぶ。",
+    "・motif は、形との相性が上位の候補から選ぶ。候補の理由（主軸の角度、線の種類、まとまり）を formReading と結びつけて説明できるものだけを選ぶ。",
     "・story は90〜160字。改行なし。神話のエピソードとして、誰が、何をして、なぜ空に置かれたのかを一つ描く。神や精霊、獣、旅人の小さな事件でよい。",
     "・keywords は2〜3個、各12文字以内。",
     "・motif と paletteId は必ず候補から選ぶ。",
@@ -169,6 +172,8 @@ export function buildPrompt(
     "【形の分析（名前より先に読む）】",
     shape.summary,
     `視覚的な手がかり: ${shape.gestures.join(" / ")}`,
+    `主軸: ${axisDescription(shape.angleDeg)}（水平を0°とする）`,
+    `線の本数: ${shape.edgeCount}本`,
     `名前の着想候補（必要な場合だけ使う）: ${hints}`,
     `星の数: ${input.stars.length}個`,
     `ユーザーの下書き線: ${sketchLines(input.sketchEdges)}`,
@@ -179,7 +184,7 @@ export function buildPrompt(
     "",
     "【モチーフ候補（この形との相性順）】",
     motifLines,
-    "モチーフの線画は完成した星図の背景に、星の広がりに合わせて描かれます。原則としてこの上位候補から、形の読みと理由が説明できるものを選んでください。",
+    "この並びは、星の配置・線の主軸・曲がり・まとまりとの相性で決まっています。モチーフの線画は完成した星図の主軸に回転し、線のまとまりごとに配置されます。1位を基本に、formReading と理由が一致するものを選んでください。",
     "",
     "【配色候補】",
     paletteList,
@@ -187,13 +192,13 @@ export function buildPrompt(
     "【figureEdges の作り方】",
     input.sketchEdges.length > 0
       ? "・ユーザーの下書き線がそのまま完成図になる。figureEdges には下書き線をすべて、同じ星番号のペアで入れる。"
-      : `・${guardrails.minEdges}〜9本。星が3〜4個しかない場合は、使える範囲でよい。`,
+      : "・下書き線はない。figureEdges は必ず [] にする。",
     input.sketchEdges.length > 0
       ? "・線を足したり消したりして形を整えてはいけない。"
-      : "・全ての星を使う必要はない。主役になる4〜7個を選ぶと形が締まる。",
+      : "・星を勝手に結ばない。星の配置だけを形の読みに使う。",
     "・閉路は必須ではない。1本だけの線、複数のまとまり、孤立した星もそのまま受け入れる。",
-    "・線が交差しすぎると読みにくくなる。交差は最小限に。",
-    "・名前と神話は、完成図のまとまり方を最初に読んでから決める。",
+    "・ユーザーの線を交差させ直したり、読みやすい形に作り替えたりしない。",
+    "・名前と神話は、星の配置と線のまとまりを最初に読んでから決める。",
     "",
     "【出力JSON】",
     "{",
@@ -206,7 +211,7 @@ export function buildPrompt(
     '  "story": "90〜160字の神話エピソード",',
     input.sketchEdges.length > 0
       ? `  "figureEdges": ${JSON.stringify(input.sketchEdges)},`
-      : '  "figureEdges": [[0, 2], [2, 4]],',
+      : '  "figureEdges": [],',
     '  "keywords": ["灯", "待つ", "夜"]',
     "}",
   ].join("\n");

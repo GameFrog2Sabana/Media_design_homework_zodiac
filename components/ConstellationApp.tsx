@@ -513,9 +513,9 @@ export default function ConstellationApp() {
     // The hand-drawn figure is authoritative. The server already enforces this,
     // but keep a second guard at the display boundary so an older deployment,
     // proxy, or model regression can never re-route the user's lines.
-    if (sketch.length > 0 && !sameEdgeSet(response.result.figureEdges, sketch)) {
+    if (!sameEdgeSet(response.result.figureEdges, sketch)) {
       console.warn(
-        "Generated figureEdges differed from the sketch; restoring the hand-drawn lines.",
+        "Generated figureEdges differed from the sketch; restoring the hand-drawn lines (which may be empty).",
       );
       response = {
         ...response,

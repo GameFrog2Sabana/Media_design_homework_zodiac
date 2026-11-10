@@ -178,12 +178,7 @@ describe("coerceConstellationResult", () => {
         epithet: "夜を渡る星座",
         story:
           "遠い海の向こうで、若い鯨が灯りをともしていた。星をたどる者だけが、その帰り道を知っているという。",
-        figureEdges: [
-          [0, 1],
-          [1, 2],
-          [2, 3],
-          [3, 0],
-        ],
+        figureEdges: [[0, 1]],
         keywords: ["灯", "海", "帰り"],
         formReading:
           "横に広がる星々が、左上から右下へ緩やかな鎖を描いている。",
@@ -194,8 +189,24 @@ describe("coerceConstellationResult", () => {
     expect(outcome.result.name).toBe("灯守りの鯨座");
     expect(outcome.result.motif).toBe("whale");
     expect(outcome.repaired).toBe(false);
+    expect(outcome.result.figureEdges).toEqual([[0, 1]]);
+  });
+
+  it("replaces model edges with the user's sketch and flags the field", () => {
+    const outcome = coerceConstellationResult(
+      validModel([
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+      ]),
+      context,
+    );
+
     // The user's one drawn line wins over the model's four suggested lines.
     expect(outcome.result.figureEdges).toEqual([[0, 1]]);
+    expect(outcome.repaired).toBe(true);
+    expect(outcome.rejectedFields).toContain("figureEdges");
   });
 
   it("keeps a ring, a branch and a separate part exactly as drawn", () => {
@@ -334,7 +345,7 @@ describe("coerceConstellationResult", () => {
     expect(outcome.rejectedFields).not.toContain("motifShape");
   });
 
-  it("keeps disconnected model edges when the user drew nothing", () => {
+  it("does not invent connections when the user drew nothing", () => {
     const outcome = coerceConstellationResult(
       {
         name: "灯守りの鯨座",
@@ -355,11 +366,29 @@ describe("coerceConstellationResult", () => {
       { ...context, sketchEdges: [] },
     );
 
-    expect(outcome.repaired).toBe(false);
-    expect(outcome.result.figureEdges).toEqual([
-      [0, 1],
-      [2, 3],
-    ]);
+    expect(outcome.result.figureEdges).toEqual([]);
+    expect(outcome.repaired).toBe(true);
+    expect(outcome.rejectedFields).toContain("figureEdges");
+  });
+
+  it("leaves every star unconnected in the offline fallback", () => {
+    const outcome = coerceConstellationResult(
+      {
+        name: "灯守りの鯨座",
+        reading: "ひもりのくじらざ",
+        motif: "whale",
+        paletteId: "tide",
+        epithet: "夜を渡る星座",
+        story:
+          "古い神話では、若い鯨が遠い海の灯りを守っていた。星をたどる者だけが、その帰り道を知っているという。",
+        figureEdges: [],
+        keywords: ["灯", "海", "帰り"],
+      },
+      { ...context, sketchEdges: [] },
+    );
+
+    expect(outcome.result.figureEdges).toEqual([]);
+    expect(outcome.result.formReading).not.toContain("鎖");
   });
 
   it("adds the 座 suffix when the model omits it", () => {

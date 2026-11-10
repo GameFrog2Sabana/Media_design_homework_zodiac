@@ -1,4 +1,4 @@
-import { decorativeStars, layoutStarMap } from "./art";
+import { decorativeStars, layoutStarMap, motifTransform } from "./art";
 import { getMotif } from "./motifs";
 import { getPalette } from "./palettes";
 import type { GalleryItem } from "./types";
@@ -41,7 +41,14 @@ export function createShareSvg(item: GalleryItem): string {
   const palette = getPalette(item.result.paletteId);
   const motif = getMotif(item.result.motif);
   const mapBox = { x: 120, y: 160, size: 840, padding: 76 };
-  const layout = layoutStarMap(item.stars, item.aspect, mapBox, item.id);
+  const layout = layoutStarMap(
+    item.stars,
+    item.aspect,
+    mapBox,
+    item.id,
+    item.result.figureEdges,
+    item.result.motif,
+  );
   const dust = decorativeStars(mapBox, layout.seed + 7, 70);
   const story = Array.from(item.result.story).slice(0, 200).join("");
   const storyLines = wrapJapanese(story, 35);
@@ -61,11 +68,29 @@ export function createShareSvg(item: GalleryItem): string {
     )
     .join("");
 
-  const motifSvg = motif.paths
+  const motifPaths = motif.paths
     .map(
       (path) =>
-        `<path d="${path}" fill="none" stroke="${palette.primary}" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round" opacity="0.25"/>`,
+        `<path d="${path}" fill="none" stroke="${palette.primary}" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round"/>`,
     )
+    .join("");
+  const motifSvg = layout.motifs
+    .map(
+      (placement) =>
+        `<g transform="${motifTransform(placement)}" opacity="${(
+          0.25 * placement.opacity
+        ).toFixed(2)}">${motifPaths}</g>`,
+    )
+    .join("");
+
+  const isolatedSvg = layout.isolated
+    .map((index) => {
+      const point = layout.points[index];
+      if (!point) return "";
+      return `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(
+        1,
+      )}" r="13" fill="none" stroke="${palette.primary}" stroke-width="1" stroke-dasharray="2 6" opacity="0.34"/>`;
+    })
     .join("");
 
   const edgeSvg = item.result.figureEdges
@@ -158,9 +183,8 @@ export function createShareSvg(item: GalleryItem): string {
   <circle cx="${layout.chartCenter.x}" cy="${layout.chartCenter.y}" r="${
     layout.chartRadius + 26
   }" fill="none" stroke="${palette.primary}" stroke-width="1" opacity="0.08"/>
-  <g transform="translate(${layout.motif.x} ${layout.motif.y}) scale(${layout.motif.scaleX} ${layout.motif.scaleY})">
-    ${motifSvg}
-  </g>
+  ${motifSvg}
+  ${isolatedSvg}
   ${dustSvg}
   ${edgeSvg}
   ${starSvg}

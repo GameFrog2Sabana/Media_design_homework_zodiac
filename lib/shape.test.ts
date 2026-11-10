@@ -99,6 +99,24 @@ describe("analyzeShape", () => {
     expect(analysis.components[0].pathShape).toBe("arc");
     expect(analysis.gestures).toContain("弧を描く鎖");
   });
+
+  it("reads spatial star groups even when no lines connect them", () => {
+    const stars = [
+      { x: 0.1, y: 0.1 },
+      { x: 0.2, y: 0.12 },
+      { x: 0.15, y: 0.2 },
+      { x: 0.78, y: 0.76 },
+      { x: 0.88, y: 0.8 },
+      { x: 0.82, y: 0.88 },
+    ];
+    const analysis = analyzeShape(stars, [], 1);
+    expect(analysis.hasLines).toBe(false);
+    expect(analysis.edgeCount).toBe(0);
+    expect(analysis.clusters).toHaveLength(2);
+    expect(analysis.summary).toContain("2つのまとまりに分かれている");
+    expect(analysis.gestures).toContain("複数の星群");
+    expect(analysis.gestures).not.toContain("孤立星");
+  });
 });
 
 describe("motif ranking", () => {
@@ -113,6 +131,13 @@ describe("motif ranking", () => {
   it("ranks a tall motif above a wide one for a vertical drawing", () => {
     const analysis = analyzeShape(vertical, [], 1);
     expect(motifFitScore("ship", analysis)).toBeGreaterThan(
+      motifFitScore("whale", analysis),
+    );
+  });
+
+  it("ranks a diagonal motif above a horizontal one for a diagonal drawing", () => {
+    const analysis = analyzeShape(diagonal, [], 1);
+    expect(motifFitScore("key", analysis)).toBeGreaterThan(
       motifFitScore("whale", analysis),
     );
   });

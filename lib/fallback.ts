@@ -1,7 +1,5 @@
 import {
   analyzeSketch,
-  augmentEdges,
-  mstEdges,
   normalizeEdgePairs,
   type SketchTopology,
 } from "./edges";
@@ -206,7 +204,7 @@ function chooseMotif(
   const topScore = ranked[0].score;
   const shapeCandidate = (ids: string[]): string | null =>
     ranked.find(
-      (match) => ids.includes(match.id) && match.score >= topScore - 2,
+      (match) => ids.includes(match.id) && match.score >= topScore - 1,
     )?.id ?? null;
 
   // Separate line groups read as a flock or a school. Prefer a motif that can
@@ -220,7 +218,7 @@ function chooseMotif(
   );
   if (hint) {
     const match = ranked.find((candidate) => candidate.id === hint.motif);
-    if (match && match.score >= topScore - 3) return hint.motif;
+    if (match && match.score >= topScore - 1) return hint.motif;
   }
   if (topology.hasLines && topology.isolated.length > 0) {
     const solitary = shapeCandidate(SOLITARY_MOTIFS);
@@ -414,15 +412,10 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
 
   const sketch = normalizeEdgePairs(input.sketchEdges ?? [], stars.length);
   const topology = analyzeSketch(sketch, stars.length);
-  const figureEdges =
-    sketch.length > 0
-      ? sketch
-      : augmentEdges(
-          mstEdges(stars),
-          stars,
-          Math.min(7, Math.max(4, stars.length - 1)),
-          11,
-        );
+  // The user's lines are the whole figure. When nothing was drawn, the figure
+  // stays empty: unconnected stars must never be auto-joined into a shape the
+  // user did not draw.
+  const figureEdges = sketch;
   const analysis = analyzeShape(stars, figureEdges, aspect);
 
   const motifId =

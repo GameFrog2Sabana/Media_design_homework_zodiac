@@ -11,7 +11,6 @@ const stars = [
 ];
 
 const variant = creativityConfig.variants[0];
-const guardrails = creativityConfig.guardrails;
 
 function promptText(sketchEdges: [number, number][]): string {
   return buildPrompt(
@@ -22,7 +21,6 @@ function promptText(sketchEdges: [number, number][]): string {
       theme: "灯台",
     },
     variant,
-    guardrails,
   )
     .map((message) => message.content)
     .join("\n");
@@ -35,20 +33,25 @@ describe("buildPrompt", () => {
       [2, 3],
     ]);
 
-    expect(text).toContain("その線を一本も欠かさず");
+    expect(text).toContain("完全に同じ配列");
+    expect(text).toContain("線を追加・削除・連結・張り替えしてはいけない");
     expect(text).toContain("2個のまとまり");
     expect(text).toContain("S0–S1、S2–S3");
     expect(text).toContain("線に含まれない星: S4");
     expect(text).toContain("閉路は必須ではない");
     expect(text).toContain("複数パーツなら");
+    expect(text).toContain("主軸:");
+    expect(text).toContain("線の本数: 2本");
   });
 
-  it("does not ask for a connected figure when no lines exist", () => {
+  it("keeps figureEdges empty when no lines exist", () => {
     const text = promptText([]);
 
     expect(text).toContain("線はまだ引かれていない");
-    expect(text).toContain("全ての星を使う必要はない");
-    expect(text).toContain("複数のまとまり、孤立した星もそのまま受け入れる");
+    expect(text).toContain("figureEdges は必ず []");
+    expect(text).toContain("星を勝手に結ばない");
+    expect(text).toContain('"figureEdges": [],');
+    expect(text).not.toContain("2〜9本");
   });
 
   it("puts an explicit shape reading before the name and motif", () => {

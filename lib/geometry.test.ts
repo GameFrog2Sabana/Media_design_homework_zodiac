@@ -103,9 +103,20 @@ describe("edgesToIndices", () => {
 });
 
 describe("buildFallback", () => {
+  // Fixed coordinates keep the motif-ranking assertions deterministic. The
+  // random default scatter is exercised separately above.
+  const fixedStars = [
+    { x: 0.1, y: 0.55 },
+    { x: 0.25, y: 0.6 },
+    { x: 0.4, y: 0.5 },
+    { x: 0.55, y: 0.58 },
+    { x: 0.7, y: 0.48 },
+    { x: 0.85, y: 0.55 },
+    { x: 0.5, y: 0.68 },
+  ];
   const input = {
-    stars,
-    sketchEdges: normalizeEdgePairs([[0, 1]], stars.length),
+    stars: fixedStars,
+    sketchEdges: normalizeEdgePairs([[0, 1]], fixedStars.length),
     aspect: 1.7,
     theme: "灯台",
     attempt: 1,
@@ -145,7 +156,7 @@ describe("buildFallback", () => {
           [0, 1],
           [2, 3],
         ],
-        stars.length,
+        fixedStars.length,
       ),
     });
     expect(result.figureEdges).toEqual([

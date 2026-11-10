@@ -92,7 +92,6 @@ export async function POST(request: Request) {
           theme: input.theme,
         },
         variant,
-        creativityConfig.guardrails,
       );
       const completion = await requestConstellationJson(
         messages,

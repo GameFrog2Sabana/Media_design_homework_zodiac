@@ -40,6 +40,9 @@ export interface ShapeComponent {
   bounds: ShapeBounds;
   center: Point;
   orientation: Exclude<ShapeOrientation, "compact">;
+  /** Principal axis of this component, in degrees from the horizontal. */
+  angleDeg: number;
+  elongation: number;
   pathShape: ComponentPathShape;
   position: string;
   cycleShape: "三角形" | "四角形" | "丸い輪" | null;
@@ -64,6 +67,10 @@ export interface ShapeAnalysis {
   density: ShapeDensity;
   components: ShapeComponent[];
   isolated: number[];
+  /** Spatial groups of unconnected stars. Empty when a line defines the figure. */
+  clusters: number[][];
+  edgeCount: number;
+  hasLines: boolean;
   gestures: string[];
   summary: string;
   /** Best-first motif candidates for this particular silhouette. */
@@ -435,6 +442,8 @@ function analyzeComponents(
       bounds,
       center,
       orientation,
+      angleDeg,
+      elongation,
       pathShape,
       cycleShape: kind === "cycle" ? cycleShapeOf(members) : null,
       position: coversMost ? "中央" : positionOf(center, overallBounds),
@@ -479,6 +488,62 @@ function separationPhrase(components: ShapeComponent[], bounds: ShapeBounds): st
   if (farthest > 0.5) return "まとまり同士は遠く離れている";
   if (farthest > 0.27) return "まとまり同士は離れている";
   return "まとまり同士は近くにある";
+}
+
+/** Undirected angular distance between two axes, in the range 0..90°. */
+function axisDelta(a: number, b: number): number {
+  const raw = Math.abs(normalizeAngle(a) - normalizeAngle(b)) % 180;
+  return raw > 90 ? 180 - raw : raw;
+}
+
+/**
+ * Group unconnected stars by proximity. When no lines exist these spatial
+ * groups are the only "parts" the drawing has, so the motif ranking should be
+ * able to read a tight cluster differently from a scattered field.
+ */
+function spatialClusters(points: Point[], bounds: ShapeBounds): number[][] {
+  if (points.length < 2) return [];
+  const diagonal = Math.hypot(bounds.width, bounds.height);
+  const threshold = Math.max(0.055, Math.min(0.24, diagonal * 0.16));
+  const parent = points.map((_, index) => index);
+
+  const find = (index: number): number => {
+    let root = index;
+    while (parent[root] !== root) root = parent[root];
+    let current = index;
+    while (parent[current] !== current) {
+      const next = parent[current];
+      parent[current] = root;
+      current = next;
+    }
+    return root;
+  };
+
+  const union = (a: number, b: number) => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent[rootB] = rootA;
+  };
+
+  for (let a = 0; a < points.length; a += 1) {
+    for (let b = a + 1; b < points.length; b += 1) {
+      if (Math.hypot(points[a].x - points[b].x, points[a].y - points[b].y) <= threshold) {
+        union(a, b);
+      }
+    }
+  }
+
+  const groups = new Map<number, number[]>();
+  for (let index = 0; index < points.length; index += 1) {
+    const root = find(index);
+    const group = groups.get(root);
+    if (group) group.push(index);
+    else groups.set(root, [index]);
+  }
+
+  return [...groups.values()]
+    .filter((group) => group.length >= 2)
+    .sort((a, b) => b.length - a.length || a[0] - b[0]);
 }
 
 function farthestStarClause(
@@ -526,15 +591,23 @@ function gesturesOf(
   if (branches.length > 0) gestures.add("枝分かれ");
   if (analysis.components.length >= 2) gestures.add("複数のまとまり");
   if (analysis.components.length >= 3) gestures.add("散らばる群れ");
-  if (analysis.isolated.length > 0) gestures.add("孤立星");
+  if (analysis.hasLines && analysis.isolated.length > 0) gestures.add("孤立星");
+  if (!analysis.hasLines && analysis.clusters.length >= 2) {
+    gestures.add("複数の星群");
+  }
   if (separation.includes("遠く")) gestures.add("遠い群れ");
 
   return [...gestures].slice(0, 7);
 }
 
-function scoreMotif(form: MotifForm, analysis: ShapeAnalysis): { score: number; reasons: string[] } {
+function scoreMotif(
+  form: MotifForm,
+  motifAngle: number,
+  analysis: ShapeAnalysis,
+): { score: number; reasons: string[] } {
   let score = 0;
   const reasons: string[] = [];
+  const delta = axisDelta(analysis.angleDeg, motifAngle);
 
   switch (analysis.orientation) {
     case "horizontal":
@@ -568,9 +641,17 @@ function scoreMotif(form: MotifForm, analysis: ShapeAnalysis): { score: number; 
       }
       break;
     case "diagonal":
-      if (form.axis === "wide" || form.axis === "tall") {
-        score += 2;
+      if (delta <= 24) {
+        score += 3;
+        reasons.push(
+          `斜め${Math.round(Math.abs(analysis.angleDeg))}°の主軸に沿う`,
+        );
+      } else if (form.axis === "wide" || form.axis === "tall") {
+        score += 1;
         reasons.push("斜めの伸びに沿う");
+      } else {
+        score += 1;
+        reasons.push("斜めの余白に収まる");
       }
       break;
     default:
@@ -583,12 +664,30 @@ function scoreMotif(form: MotifForm, analysis: ShapeAnalysis): { score: number; 
       break;
   }
 
+  // Even when the coarse outline is wide or tall, the artwork's own long axis
+  // should point the same way as the constellation. This is what lets a
+  // diagonal drawing pick a diagonal motif rather than a generic horizontal
+  // one.
+  if (
+    analysis.elongation >= 1.35 &&
+    analysis.orientation !== "diagonal" &&
+    analysis.orientation !== "compact"
+  ) {
+    if (delta <= 18) {
+      score += 2;
+      reasons.push("主軸の角度が重なる");
+    } else if (delta >= 55) {
+      score -= 2;
+    }
+  }
+
   const hasArc = analysis.components.some((component) => component.pathShape === "arc");
   const hasZigzag = analysis.components.some(
     (component) => component.pathShape === "zigzag",
   );
   const hasBranch = analysis.components.some((component) => component.kind === "branch");
   const hasCycle = analysis.components.some((component) => component.kind === "cycle");
+  const hasMesh = analysis.components.some((component) => component.kind === "mesh");
 
   if (hasArc && form.gesture === "curve") {
     score += 2;
@@ -606,16 +705,24 @@ function scoreMotif(form: MotifForm, analysis: ShapeAnalysis): { score: number; 
     score += 2;
     reasons.push("輪の形が響く");
   }
+  if (hasMesh && form.gesture === "angle") {
+    score += 1;
+    reasons.push("網の角度が響く");
+  }
 
-  if (analysis.components.length >= 2 && form.group) {
+  const groupSignal =
+    analysis.components.length >= 2 ||
+    (!analysis.hasLines && analysis.clusters.length >= 2);
+  const isolatedCount = analysis.hasLines ? analysis.isolated.length : 0;
+  if (groupSignal && form.group) {
     score += 2;
     reasons.push("複数のまとまりを群れとして読める");
   }
-  if (analysis.isolated.length > 0 && form.group) {
+  if (isolatedCount > 0 && form.group) {
     score += 1;
     reasons.push("孤立星を連れとして読める");
   }
-  if (analysis.components.length <= 1 && analysis.isolated.length === 0 && form.group) {
+  if (!groupSignal && isolatedCount === 0 && form.group) {
     score -= 1;
   }
 
@@ -631,7 +738,7 @@ export function rankMotifs(analysis: ShapeAnalysis): MotifMatch[] {
       gesture: "curve" as const,
       group: false,
     };
-    const { score, reasons } = scoreMotif(form, analysis);
+    const { score, reasons } = scoreMotif(form, motif.axisAngle, analysis);
     return {
       id: motif.id,
       label: motif.label,
@@ -663,8 +770,15 @@ export function shapeNameHints(analysis: ShapeAnalysis): string[] {
   if (analysis.orientation === "diagonal") add("矢", "坂", "舵", "渡り");
   if (analysis.orientation === "compact") add("巣", "実", "玉", "瞳", "貝");
   if (analysis.orientation === "balanced") add("門", "庭", "環");
-  if (analysis.components.length >= 2) add("島", "群れ", "渡り", "遠雷");
-  if (analysis.isolated.length > 0) add("余白", "忘れ物", "孤星");
+  if (
+    analysis.components.length >= 2 ||
+    (!analysis.hasLines && analysis.clusters.length >= 2)
+  ) {
+    add("島", "群れ", "渡り", "遠雷");
+  }
+  if (analysis.hasLines && analysis.isolated.length > 0) {
+    add("余白", "忘れ物", "孤星");
+  }
   if (analysis.components.some((component) => component.kind === "cycle")) {
     add("環", "輪", "門");
   }
@@ -714,10 +828,12 @@ export function analyzeShape(
         : "balanced";
 
   const components = analyzeComponents(stars, edges, safeAspect, bounds);
+  const hasLines = edges.length > 0;
   const connected = new Set(components.flatMap((component) => component.stars));
   const isolated = stars
     .map((_, index) => index)
     .filter((index) => !connected.has(index));
+  const clusters = hasLines ? [] : spatialClusters(world, bounds);
   const separation = separationPhrase(components, bounds);
 
   const parts: string[] = [];
@@ -738,11 +854,19 @@ export function analyzeShape(
 
   if (components.length === 0) {
     const far = farthestStarClause(stars, world, centroid, bounds);
-    parts.push(
-      far
-        ? `${far}。線はまだ引かれていない`
-        : "線はまだ引かれていない。星の配置だけで形を読む",
-    );
+    if (clusters.length >= 2) {
+      parts.push(
+        `星は${clusters.length}つのまとまりに分かれている${
+          far ? `。${far}` : ""
+        }。線はまだ引かれていない`,
+      );
+    } else {
+      parts.push(
+        far
+          ? `${far}。線はまだ引かれていない`
+          : "線はまだ引かれていない。星の配置だけで形を読む",
+      );
+    }
   } else {
     for (const component of components.slice(0, 3)) {
       parts.push(componentClause(component));
@@ -767,6 +891,9 @@ export function analyzeShape(
     density,
     components,
     isolated,
+    clusters,
+    edgeCount: edges.length,
+    hasLines,
   };
   const gestures = gesturesOf(base, separation);
   const analysis: ShapeAnalysis = {
