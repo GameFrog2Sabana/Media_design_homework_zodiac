@@ -7,7 +7,8 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { getMotif } from "@/lib/motifs";
+import { displaySubject } from "@/lib/legacy";
+import { getLineStyle } from "@/lib/lineStyle";
 import { getPalette } from "@/lib/palettes";
 import { analyzeShape } from "@/lib/shape";
 import { downloadConstellationPng } from "@/lib/share";
@@ -80,7 +81,8 @@ export default function ResultPanel({
   const [hoverRating, setHoverRating] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const palette = getPalette(item.result.paletteId);
-  const motif = getMotif(item.result.motif);
+  const style = getLineStyle(item.result.lineStyle);
+  const subject = displaySubject(item.result.subject, item.result.motif);
   const rating = item.rating ?? 0;
   const activeRating = hoverRating || rating;
   const figureNumber = useMemo(
@@ -156,7 +158,7 @@ export default function ResultPanel({
                 aspect={item.aspect}
                 figureEdges={item.result.figureEdges}
                 paletteId={item.result.paletteId}
-                motif={item.result.motif}
+                lineStyle={style.id}
                 seedKey={item.id}
                 className="result-map"
               />
@@ -170,7 +172,7 @@ export default function ResultPanel({
                 {item.stars.length} STARS / {item.result.figureEdges.length}{" "}
                 {item.result.figureEdges.length === 1 ? "LINE" : "LINES"}
               </span>
-              <span>MOTIF · {motif.label}</span>
+              <span>FIGURE · {style.label}</span>
             </div>
           </div>
 
@@ -187,6 +189,9 @@ export default function ResultPanel({
             <p className="story-kicker form-kicker">FORM / 形の読み</p>
             <p className="result-form">{formReading}</p>
 
+            <p className="story-kicker">SUBJECT / 情景</p>
+            <p className="result-subject">{subject}</p>
+
             <p className="story-kicker">MYTH / 神話</p>
             <p className="result-story">{item.result.story}</p>
 
@@ -200,8 +205,8 @@ export default function ResultPanel({
 
             <dl className="result-facts">
               <div>
-                <dt>モチーフ</dt>
-                <dd>{motif.label}</dd>
+                <dt>FIGURE / 線の読み</dt>
+                <dd>{style.label}</dd>
               </div>
               <div>
                 <dt>配色</dt>

@@ -1,9 +1,10 @@
+import { normalizeEdgePairs } from "./edges";
 import { hashString, mulberry32 } from "./geometry";
-import { getMotif, type Motif } from "./motifs";
-import type { FigureEdge, Point } from "./types";
+import { DEFAULT_LINE_STYLE, isLineStyle } from "./lineStyle";
+import type { FigureEdge, LineStyle, Point } from "./types";
 
 const EPSILON = 1e-9;
-const DEG = Math.PI / 180;
+const MAX_ENGRAVING_PATHS = 420;
 
 export interface ArtBox {
   x: number;
@@ -12,224 +13,145 @@ export interface ArtBox {
   padding: number;
 }
 
-export interface MotifBounds {
-  minX: number;
-  minY: number;
+/** One fine line generated from the user's drawing, in art coordinates. */
+export interface EngravingPath {
+  d: string;
+  opacity: number;
   width: number;
-  height: number;
+  dash?: string;
 }
 
-/**
- * One placement of the engraved motif. The transform maps the motif's own
- * path coordinates around the centre of its measured bounds, then rotates the
- * drawing to the constellation's principal axis. `scaleX`/`scaleY` are in
- * motif-viewBox units, not stage units.
- */
-export interface MotifPlacement {
+/** A dashed halo around a star that no line touches. */
+export interface EngravingHalo {
   cx: number;
   cy: number;
-  /** Clockwise SVG rotation in degrees. */
-  rotation: number;
-  scaleX: number;
-  scaleY: number;
-  bounds: MotifBounds;
-  /** 1 for the main figure, below 1 for the echoes of separate parts. */
+  r: number;
   opacity: number;
+  dash?: string;
+}
+
+export interface Engraving {
+  paths: EngravingPath[];
+  halos: EngravingHalo[];
+  /** Number of separate connected line groups. */
+  parts: number;
+  /** Star indices untouched by any line. */
+  isolated: number[];
 }
 
 export interface ArtLayout {
   points: Point[];
   chartCenter: Point;
   chartRadius: number;
-  /** Primary motif placement (the largest connected part). */
-  motif: MotifPlacement;
-  /** One placement per connected part. Isolated stars get no motif. */
-  motifs: MotifPlacement[];
-  /** Stars untouched by any line, when at least one line exists. */
+  /** Stars untouched by any line. When nothing was drawn, every star is here. */
   isolated: number[];
   /** Deterministic decoration seed. */
   seed: number;
+  engraving: Engraving;
 }
 
-const DEFAULT_BOUNDS: MotifBounds = {
-  minX: 0,
-  minY: 0,
-  width: 100,
-  height: 100,
-};
-
-const PATH_ARG_COUNTS: Record<string, number> = {
-  M: 2,
-  L: 2,
-  H: 1,
-  V: 1,
-  C: 6,
-  S: 4,
-  Q: 4,
-  T: 2,
-  A: 7,
-  Z: 0,
-};
+interface EngravingProfile {
+  echoOffset: number;
+  echoOpacity: number;
+  echoWidth: number;
+  echoBow: number;
+  echoDash?: string;
+  tickEvery: number;
+  tickLength: number;
+  tickOpacity: number;
+  tickWidth: number;
+  tickDash?: string;
+  endpoint: "taper" | "cap" | "fan" | "leaf";
+  ringDash?: string;
+  haloDash: string;
+  haloRadius: number;
+  haloOpacity: number;
+  rayCount: number;
+  rayLength: number;
+}
 
 /**
- * Measure the real extent of the curated path art. The old renderer assumed
- * every motif filled the whole 0..100 viewBox; several do not, which made the
- * engraving float away from the stars. Arc flags and radii are not coordinates,
- * so they are handled explicitly instead of treating every number as a point.
+ * The four line styles share the same graph reading. They differ only in the
+ * marks drawn beside it: how echoes curve, how often ticks appear, how ends
+ * close, and how isolated stars are haloed.
  */
-export function svgPathBounds(paths: string[]): MotifBounds {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  let found = false;
+const PROFILES: Record<LineStyle, EngravingProfile> = {
+  flowing: {
+    echoOffset: 6,
+    echoOpacity: 0.42,
+    echoWidth: 0.9,
+    echoBow: 0.95,
+    tickEvery: 3,
+    tickLength: 2.6,
+    tickOpacity: 0.32,
+    tickWidth: 0.7,
+    endpoint: "taper",
+    haloDash: "1.4 4",
+    haloRadius: 7,
+    haloOpacity: 0.42,
+    rayCount: 4,
+    rayLength: 8,
+  },
+  hard: {
+    echoOffset: 4,
+    echoOpacity: 0.44,
+    echoWidth: 0.85,
+    echoBow: 0,
+    tickEvery: 2,
+    tickLength: 3.4,
+    tickOpacity: 0.34,
+    tickWidth: 0.72,
+    endpoint: "cap",
+    haloDash: "2 2.4",
+    haloRadius: 6,
+    haloOpacity: 0.4,
+    rayCount: 4,
+    rayLength: 6,
+  },
+  radial: {
+    echoOffset: 3.6,
+    echoOpacity: 0.4,
+    echoWidth: 0.8,
+    echoBow: 0.25,
+    tickEvery: 2,
+    tickLength: 4.4,
+    tickOpacity: 0.34,
+    tickWidth: 0.7,
+    endpoint: "fan",
+    ringDash: "1.8 3",
+    haloDash: "1.2 3",
+    haloRadius: 7.5,
+    haloOpacity: 0.44,
+    rayCount: 8,
+    rayLength: 9,
+  },
+  delicate: {
+    echoOffset: 5.2,
+    echoOpacity: 0.34,
+    echoWidth: 0.75,
+    echoBow: 0.55,
+    echoDash: "1.2 3.6",
+    tickEvery: 4,
+    tickLength: 2.2,
+    tickOpacity: 0.28,
+    tickWidth: 0.65,
+    endpoint: "leaf",
+    haloDash: "1 3.6",
+    haloRadius: 6.4,
+    haloOpacity: 0.36,
+    rayCount: 4,
+    rayLength: 7,
+  },
+};
 
-  for (const d of paths) {
-    const tokens = d.match(
-      /[MmLlHhVvCcSsQqTtAaZz]|-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g,
-    );
-    if (!tokens) continue;
+type ComponentKind = "chain" | "cycle" | "branch" | "mesh";
 
-    let index = 0;
-    let command = "";
-    let cx = 0;
-    let cy = 0;
-    let subpathX = 0;
-    let subpathY = 0;
-
-    const include = (x: number, y: number) => {
-      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-      found = true;
-    };
-
-    while (index < tokens.length) {
-      const token = tokens[index];
-      if (/^[A-Za-z]$/.test(token)) {
-        command = token;
-        index += 1;
-        if (command === "Z" || command === "z") {
-          cx = subpathX;
-          cy = subpathY;
-          include(cx, cy);
-        }
-        continue;
-      }
-
-      if (!command) {
-        index += 1;
-        continue;
-      }
-
-      const upper = command.toUpperCase();
-      const count = PATH_ARG_COUNTS[upper] ?? 0;
-      if (count === 0) {
-        index += 1;
-        continue;
-      }
-
-      const args = tokens.slice(index, index + count).map(Number);
-      if (args.length < count || args.some((value) => !Number.isFinite(value))) {
-        break;
-      }
-      index += count;
-
-      const relative = command !== upper;
-      const x = (value: number) => (relative ? cx + value : value);
-      const y = (value: number) => (relative ? cy + value : value);
-
-      switch (upper) {
-        case "M":
-        case "L": {
-          cx = x(args[0]);
-          cy = y(args[1]);
-          include(cx, cy);
-          if (upper === "M") {
-            subpathX = cx;
-            subpathY = cy;
-            // Additional coordinate pairs after a move are implicit lines.
-            command = relative ? "l" : "L";
-          }
-          break;
-        }
-        case "H": {
-          cx = relative ? cx + args[0] : args[0];
-          include(cx, cy);
-          break;
-        }
-        case "V": {
-          cy = relative ? cy + args[0] : args[0];
-          include(cx, cy);
-          break;
-        }
-        case "C": {
-          const c1x = x(args[0]);
-          const c1y = y(args[1]);
-          const c2x = x(args[2]);
-          const c2y = y(args[3]);
-          cx = x(args[4]);
-          cy = y(args[5]);
-          include(c1x, c1y);
-          include(c2x, c2y);
-          include(cx, cy);
-          break;
-        }
-        case "S":
-        case "Q": {
-          const c1x = x(args[0]);
-          const c1y = y(args[1]);
-          cx = x(args[2]);
-          cy = y(args[3]);
-          include(c1x, c1y);
-          include(cx, cy);
-          break;
-        }
-        case "T": {
-          cx = x(args[0]);
-          cy = y(args[1]);
-          include(cx, cy);
-          break;
-        }
-        case "A": {
-          const rx = Math.abs(args[0]);
-          const ry = Math.abs(args[1]);
-          const endX = x(args[5]);
-          const endY = y(args[6]);
-          // A conservative ellipse box around both endpoints is enough for
-          // layout: it never underestimates an arc's reach.
-          include(cx - rx, cy - ry);
-          include(cx + rx, cy + ry);
-          include(endX - rx, endY - ry);
-          include(endX + rx, endY + ry);
-          include(endX, endY);
-          cx = endX;
-          cy = endY;
-          break;
-        }
-        default:
-          break;
-      }
-    }
-  }
-
-  if (!found) return DEFAULT_BOUNDS;
-
-  // Include a little room for the stroke itself.
-  const pad = 1.5;
-  minX -= pad;
-  minY -= pad;
-  maxX += pad;
-  maxY += pad;
-
-  return {
-    minX,
-    minY,
-    width: Math.max(EPSILON, maxX - minX),
-    height: Math.max(EPSILON, maxY - minY),
-  };
+interface Component {
+  members: number[];
+  edges: FigureEdge[];
+  degree: Map<number, number>;
+  kind: ComponentKind;
+  center: Point;
 }
 
 function number(value: number): string {
@@ -238,40 +160,8 @@ function number(value: number): string {
     : "0";
 }
 
-/** SVG transform for a placement, in the same coordinate space as the paths. */
-export function motifTransform(placement: MotifPlacement): string {
-  const { bounds } = placement;
-  const centerX = bounds.minX + bounds.width / 2;
-  const centerY = bounds.minY + bounds.height / 2;
-  return [
-    `translate(${number(placement.cx)} ${number(placement.cy)})`,
-    `rotate(${number(placement.rotation)})`,
-    `scale(${number(placement.scaleX)} ${number(placement.scaleY)})`,
-    `translate(${number(-centerX)} ${number(-centerY)})`,
-  ].join(" ");
-}
-
-/** Axis-aligned on-screen bounds after the placement's rotation and scale. */
-export function motifScreenBounds(placement: MotifPlacement): {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-} {
-  const c = Math.abs(Math.cos(placement.rotation * DEG));
-  const s = Math.abs(Math.sin(placement.rotation * DEG));
-  const width =
-    placement.bounds.width * placement.scaleX * c +
-    placement.bounds.height * placement.scaleY * s;
-  const height =
-    placement.bounds.width * placement.scaleX * s +
-    placement.bounds.height * placement.scaleY * c;
-  return {
-    x: placement.cx - width / 2,
-    y: placement.cy - height / 2,
-    width,
-    height,
-  };
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 function meanPoint(points: Point[]): Point {
@@ -285,250 +175,67 @@ function meanPoint(points: Point[]): Point {
   return { x: x / points.length, y: y / points.length };
 }
 
-function normalizeAngle(degrees: number): number {
-  let angle = degrees % 180;
-  if (angle > 90) angle -= 180;
-  if (angle <= -90) angle += 180;
-  return angle;
+function pointAt(
+  point: Point,
+  ux: number,
+  uy: number,
+  distance: number,
+): Point {
+  return { x: point.x + ux * distance, y: point.y + uy * distance };
 }
 
-/**
- * Principal axis of the drawing in SVG coordinates. Star positions and the
- * directions of the user's segments both contribute; long segments count more
- * than short ones. Returns an undirected axis in -90..90 degrees.
- */
-function principalAxis(
-  points: Point[],
+function unitVector(a: Point, b: Point): { x: number; y: number } {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (length < EPSILON) return { x: 1, y: 0 };
+  return { x: dx / length, y: dy / length };
+}
+
+function midpoint(a: Point, b: Point, t = 0.5): Point {
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  };
+}
+
+function linePath(a: Point, b: Point): string {
+  return `M ${number(a.x)} ${number(a.y)} L ${number(b.x)} ${number(b.y)}`;
+}
+
+function quadPath(a: Point, control: Point, b: Point): string {
+  return `M ${number(a.x)} ${number(a.y)} Q ${number(control.x)} ${number(
+    control.y,
+  )} ${number(b.x)} ${number(b.y)}`;
+}
+
+function polylinePath(points: Point[], close = false): string {
+  if (points.length === 0) return "";
+  const head = `M ${number(points[0].x)} ${number(points[0].y)}`;
+  const tail = points
+    .slice(1)
+    .map((point) => `L ${number(point.x)} ${number(point.y)}`)
+    .join(" ");
+  return close ? `${head} ${tail} Z` : `${head} ${tail}`;
+}
+
+function rotateVector(
+  vector: { x: number; y: number },
+  degrees: number,
+): { x: number; y: number } {
+  const radians = (degrees * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return {
+    x: vector.x * cos - vector.y * sin,
+    y: vector.x * sin + vector.y * cos,
+  };
+}
+
+function graphComponents(
+  starCount: number,
   edges: FigureEdge[],
-): { angle: number; elongation: number } {
-  if (points.length < 2) return { angle: 0, elongation: 1 };
-
-  const center = meanPoint(points);
-  let xx = 0;
-  let yy = 0;
-  let xy = 0;
-  for (const point of points) {
-    const dx = point.x - center.x;
-    const dy = point.y - center.y;
-    xx += dx * dx;
-    yy += dy * dy;
-    xy += dx * dy;
-  }
-  let trace = xx + yy;
-  if (trace > EPSILON) {
-    xx /= trace;
-    yy /= trace;
-    xy /= trace;
-  } else {
-    xx = 0.5;
-    yy = 0.5;
-    xy = 0;
-  }
-
-  if (edges.length > 0) {
-    let exx = 0;
-    let eyy = 0;
-    let exy = 0;
-    let weight = 0;
-    for (const [a, b] of edges) {
-      const start = points[a];
-      const end = points[b];
-      if (!start || !end) continue;
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const length = Math.hypot(dx, dy);
-      if (length < EPSILON) continue;
-      const ux = dx / length;
-      const uy = dy / length;
-      exx += ux * ux * length;
-      eyy += uy * uy * length;
-      exy += ux * uy * length;
-      weight += length;
-    }
-    if (weight > EPSILON) {
-      exx /= weight;
-      eyy /= weight;
-      exy /= weight;
-      xx = xx * 0.4 + exx * 0.6;
-      yy = yy * 0.4 + eyy * 0.6;
-      xy = xy * 0.4 + exy * 0.6;
-      trace = xx + yy;
-      if (trace > EPSILON) {
-        xx /= trace;
-        yy /= trace;
-        xy /= trace;
-      }
-    }
-  }
-
-  const spread = Math.sqrt(Math.max(0, (xx - yy) ** 2 + 4 * xy * xy));
-  const major = (xx + yy) / 2 + spread / 2;
-  const minor = Math.max(EPSILON, (xx + yy) / 2 - spread / 2);
-  return {
-    angle: normalizeAngle((0.5 * Math.atan2(2 * xy, xx - yy) * 180) / Math.PI),
-    elongation: Math.sqrt(Math.max(0, major / minor)),
-  };
-}
-
-interface Frame {
-  cx: number;
-  cy: number;
-  angle: number;
-  along: number;
-  across: number;
-  elongation: number;
-}
-
-function frameOf(points: Point[], edges: FigureEdge[]): Frame {
-  if (points.length === 0) {
-    return {
-      cx: 0,
-      cy: 0,
-      angle: 0,
-      along: 0,
-      across: 0,
-      elongation: 1,
-    };
-  }
-
-  const minX = Math.min(...points.map((point) => point.x));
-  const maxX = Math.max(...points.map((point) => point.x));
-  const minY = Math.min(...points.map((point) => point.y));
-  const maxY = Math.max(...points.map((point) => point.y));
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
-
-  const { angle, elongation } = principalAxis(points, edges);
-  // A round cluster has no meaningful direction; keeping it upright avoids a
-  // random-looking tilt.
-  const theta = elongation >= 1.22 ? angle : 0;
-  const cos = Math.cos(theta * DEG);
-  const sin = Math.sin(theta * DEG);
-
-  let minU = Number.POSITIVE_INFINITY;
-  let maxU = Number.NEGATIVE_INFINITY;
-  let minV = Number.POSITIVE_INFINITY;
-  let maxV = Number.NEGATIVE_INFINITY;
-  for (const point of points) {
-    const dx = point.x - cx;
-    const dy = point.y - cy;
-    const u = dx * cos + dy * sin;
-    const v = -dx * sin + dy * cos;
-    minU = Math.min(minU, u);
-    maxU = Math.max(maxU, u);
-    minV = Math.min(minV, v);
-    maxV = Math.max(maxV, v);
-  }
-
-  return {
-    cx,
-    cy,
-    angle: theta,
-    along: maxU - minU,
-    across: maxV - minV,
-    elongation,
-  };
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function placementFor(
-  frame: Frame,
-  motif: Motif,
-  bounds: MotifBounds,
-  box: ArtBox,
-  inner: number,
-  opacity: number,
-): MotifPlacement {
-  const elongated =
-    frame.elongation >= 1.22 && Math.max(frame.along, frame.across) > 1;
-  let rotation = 0;
-  let scaleX = 1;
-  let scaleY = 1;
-
-  if (elongated) {
-    // Rotate the artwork's own long axis onto the constellation's main axis.
-    rotation = normalizeAngle(frame.angle - motif.axisAngle);
-
-    const padAlong = Math.max(inner * 0.055, frame.along * 0.14);
-    const padAcross = Math.max(inner * 0.055, frame.across * 0.24);
-    const targetAlong = Math.max(inner * 0.3, frame.along + padAlong * 2);
-    const targetAcross = Math.max(inner * 0.2, frame.across + padAcross * 2);
-
-    // The target rectangle is measured in the figure frame. In the motif's
-    // local frame its long side sits at `motif.axisAngle`, so project the
-    // target rectangle onto the motif's x/y axes before scaling.
-    const c = Math.abs(Math.cos(motif.axisAngle * DEG));
-    const s = Math.abs(Math.sin(motif.axisAngle * DEG));
-    const localWidth = targetAlong * c + targetAcross * s;
-    const localHeight = targetAlong * s + targetAcross * c;
-
-    scaleX = localWidth / bounds.width;
-    scaleY = localHeight / bounds.height;
-
-    // Extreme drawings should follow the figure without turning the artwork
-    // into an unreadable smear.
-    const maxRatio = 5;
-    const ratio = scaleX / scaleY;
-    const geometric = Math.sqrt(scaleX * scaleY);
-    if (ratio > maxRatio) {
-      scaleX = geometric * Math.sqrt(maxRatio);
-      scaleY = geometric / Math.sqrt(maxRatio);
-    } else if (ratio < 1 / maxRatio) {
-      scaleX = geometric / Math.sqrt(maxRatio);
-      scaleY = geometric * Math.sqrt(maxRatio);
-    }
-  } else {
-    // Round / compact figures keep the motif upright and preserve its aspect.
-    const target = Math.max(
-      inner * 0.4,
-      Math.max(frame.along, frame.across) * 1.8,
-    );
-    const scale = target / Math.max(bounds.width, bounds.height);
-    scaleX = scale;
-    scaleY = scale;
-  }
-
-  const c = Math.abs(Math.cos(rotation * DEG));
-  const s = Math.abs(Math.sin(rotation * DEG));
-  let rotatedWidth = bounds.width * scaleX * c + bounds.height * scaleY * s;
-  let rotatedHeight = bounds.width * scaleX * s + bounds.height * scaleY * c;
-  const fit = Math.min(
-    1,
-    inner / Math.max(EPSILON, rotatedWidth, rotatedHeight),
-  );
-  scaleX *= fit;
-  scaleY *= fit;
-  rotatedWidth *= fit;
-  rotatedHeight *= fit;
-
-  const outerMin = box.x + 6;
-  const outerMax = box.x + box.size - 6;
-  const halfWidth = rotatedWidth / 2;
-  const halfHeight = rotatedHeight / 2;
-  const cx =
-    rotatedWidth <= outerMax - outerMin
-      ? clamp(frame.cx, outerMin + halfWidth, outerMax - halfWidth)
-      : box.x + box.size / 2;
-  const cy =
-    rotatedHeight <= outerMax - outerMin
-      ? clamp(frame.cy, outerMin + halfHeight, outerMax - halfHeight)
-      : box.y + box.size / 2;
-
-  return {
-    cx,
-    cy,
-    rotation,
-    scaleX,
-    scaleY,
-    bounds,
-    opacity,
-  };
-}
-
-function connectedGroups(starCount: number, edges: FigureEdge[]): number[][] {
+): number[][] {
   const adjacency = Array.from({ length: starCount }, () => new Set<number>());
   for (const [a, b] of edges) {
     adjacency[a]?.add(b);
@@ -536,7 +243,7 @@ function connectedGroups(starCount: number, edges: FigureEdge[]): number[][] {
   }
 
   const seen = new Set<number>();
-  const groups: number[][] = [];
+  const components: number[][] = [];
   for (let start = 0; start < starCount; start += 1) {
     if (seen.has(start) || adjacency[start].size === 0) continue;
     const stack = [start];
@@ -553,28 +260,639 @@ function connectedGroups(starCount: number, edges: FigureEdge[]): number[][] {
       }
     }
     members.sort((a, b) => a - b);
-    groups.push(members);
+    components.push(members);
   }
-  return groups;
+  return components;
 }
 
-function edgesWithin(members: number[], edges: FigureEdge[]): FigureEdge[] {
-  const set = new Set(members);
-  return edges.filter(([a, b]) => set.has(a) && set.has(b));
+function componentKind(
+  members: number[],
+  edges: FigureEdge[],
+  degree: Map<number, number>,
+): ComponentKind {
+  const maxDegree = Math.max(
+    ...members.map((member) => degree.get(member) ?? 0),
+  );
+  const isCycle =
+    members.length >= 3 &&
+    edges.length === members.length &&
+    members.every((member) => degree.get(member) === 2);
+  if (isCycle) return "cycle";
+  if (edges.length === members.length - 1 && maxDegree <= 2) return "chain";
+  if (maxDegree >= 3) return "branch";
+  return "mesh";
+}
+
+function collectComponents(
+  points: Point[],
+  edges: FigureEdge[],
+): Component[] {
+  return graphComponents(points.length, edges)
+    .map((members) => {
+      const memberSet = new Set(members);
+      const componentEdges = edges.filter(
+        ([a, b]) => memberSet.has(a) && memberSet.has(b),
+      );
+      const degree = new Map<number, number>();
+      for (const member of members) degree.set(member, 0);
+      for (const [a, b] of componentEdges) {
+        degree.set(a, (degree.get(a) ?? 0) + 1);
+        degree.set(b, (degree.get(b) ?? 0) + 1);
+      }
+      return {
+        members,
+        edges: componentEdges,
+        degree,
+        kind: componentKind(members, componentEdges, degree),
+        center: meanPoint(members.map((member) => points[member])),
+      } satisfies Component;
+    })
+    .sort(
+      (a, b) => b.members.length - a.members.length || a.members[0] - b.members[0],
+    );
+}
+
+function addEndpointMark(
+  node: Point,
+  neighbor: Point,
+  profile: EngravingProfile,
+  emit: (
+    path: string,
+    opacity: number,
+    width: number,
+    dash?: string,
+  ) => void,
+  random: () => number,
+  branchTip: boolean,
+): void {
+  if (!Number.isFinite(node.x) || !Number.isFinite(neighbor.x)) return;
+  const direction = unitVector(neighbor, node);
+  if (!Number.isFinite(direction.x)) return;
+  const normal = { x: -direction.y, y: direction.x };
+  const base = pointAt(node, direction.x, direction.y, 3.2);
+  const tipDistance = branchTip ? 9 + random() * 3.4 : 7 + random() * 2.2;
+  const tip = pointAt(node, direction.x, direction.y, tipDistance);
+
+  if (branchTip || profile.endpoint === "leaf") {
+    const spread = branchTip ? 2.4 + random() * 1.4 : 1.6 + random() * 0.8;
+    const shoulder = pointAt(base, direction.x, direction.y, tipDistance * 0.42);
+    const leftControl = pointAt(shoulder, normal.x, normal.y, spread);
+    const rightControl = pointAt(shoulder, normal.x, normal.y, -spread);
+    emit(
+      quadPath(
+        pointAt(base, normal.x, normal.y, spread * 0.62),
+        leftControl,
+        tip,
+      ),
+      0.38,
+      0.8,
+    );
+    emit(
+      quadPath(
+        pointAt(base, normal.x, normal.y, -spread * 0.62),
+        rightControl,
+        tip,
+      ),
+      0.38,
+      0.8,
+    );
+    return;
+  }
+
+  if (profile.endpoint === "cap") {
+    const half = 3.1;
+    emit(
+      linePath(
+        pointAt(base, normal.x, normal.y, half),
+        pointAt(base, normal.x, normal.y, -half),
+      ),
+      0.4,
+      0.82,
+    );
+    emit(
+      linePath(
+        pointAt(base, normal.x, normal.y, half),
+        pointAt(tip, normal.x, normal.y, 0.9),
+      ),
+      0.3,
+      0.62,
+    );
+    emit(
+      linePath(
+        pointAt(base, normal.x, normal.y, -half),
+        pointAt(tip, normal.x, normal.y, -0.9),
+      ),
+      0.3,
+      0.62,
+    );
+    return;
+  }
+
+  if (profile.endpoint === "fan") {
+    for (const angle of [-26, 0, 26]) {
+      const ray = rotateVector(direction, angle);
+      emit(
+        linePath(
+          base,
+          pointAt(base, ray.x, ray.y, 7 + random() * 2.4),
+        ),
+        0.34,
+        0.7,
+      );
+    }
+    return;
+  }
+
+  // A brush-like pair of converging strokes for flowing chains.
+  emit(
+    linePath(pointAt(base, normal.x, normal.y, 1.7), tip),
+    0.36,
+    0.76,
+  );
+  emit(
+    linePath(pointAt(base, normal.x, normal.y, -1.7), tip),
+    0.36,
+    0.76,
+  );
+}
+
+function addEdgeMarks(
+  a: Point,
+  b: Point,
+  profile: EngravingProfile,
+  side: number,
+  edgeIndex: number,
+  emit: (
+    path: string,
+    opacity: number,
+    width: number,
+    dash?: string,
+  ) => void,
+): void {
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  if (length < 7) return;
+  const direction = unitVector(a, b);
+  const normal = { x: -direction.y, y: direction.x };
+  const trim = Math.min(length * 0.18, 9);
+  if (length <= trim * 2 + 2) return;
+
+  const start = pointAt(a, direction.x, direction.y, trim);
+  const end = pointAt(b, direction.x, direction.y, -trim);
+  const offset = Math.min(
+    profile.echoOffset,
+    Math.max(2.2, length * 0.12),
+  );
+  const center = midpoint(start, end);
+
+  if (profile.echoDash) {
+    const control = pointAt(
+      center,
+      normal.x,
+      normal.y,
+      side * offset * 1.15,
+    );
+    emit(
+      quadPath(start, control, end),
+      profile.echoOpacity,
+      profile.echoWidth,
+      profile.echoDash,
+    );
+  } else if (profile.echoBow > 0) {
+    for (const directionSign of [1, -1]) {
+      const bow =
+        directionSign === side
+          ? offset * profile.echoBow
+          : offset * profile.echoBow * 0.4;
+      const control = pointAt(
+        center,
+        normal.x,
+        normal.y,
+        directionSign * offset + bow,
+      );
+      emit(
+        quadPath(start, control, end),
+        profile.echoOpacity * (directionSign === 1 ? 1 : 0.8),
+        profile.echoWidth,
+      );
+    }
+  } else {
+    for (const directionSign of [1, -1]) {
+      emit(
+        linePath(
+          pointAt(start, normal.x, normal.y, directionSign * offset),
+          pointAt(end, normal.x, normal.y, directionSign * offset),
+        ),
+        profile.echoOpacity * (directionSign === 1 ? 1 : 0.82),
+        profile.echoWidth,
+      );
+    }
+  }
+
+  if (
+    profile.tickEvery > 0 &&
+    edgeIndex % profile.tickEvery === 0 &&
+    length > 18
+  ) {
+    const count = Math.max(1, Math.min(4, Math.floor(length / 28)));
+    for (let index = 1; index <= count; index += 1) {
+      const t = index / (count + 1);
+      const base = midpoint(start, end, t);
+      const inner = pointAt(
+        base,
+        normal.x,
+        normal.y,
+        side * offset * 0.3,
+      );
+      const outer = pointAt(
+        base,
+        normal.x,
+        normal.y,
+        side * (offset * 0.3 + profile.tickLength),
+      );
+      emit(
+        linePath(inner, outer),
+        profile.tickOpacity,
+        profile.tickWidth,
+        profile.tickDash,
+      );
+    }
+  }
+}
+
+function addCycleMarks(
+  component: Component,
+  points: Point[],
+  profile: EngravingProfile,
+  emit: (
+    path: string,
+    opacity: number,
+    width: number,
+    dash?: string,
+  ) => void,
+): void {
+  const { center, members } = component;
+  const radii = members.map((member) =>
+    Math.hypot(points[member].x - center.x, points[member].y - center.y),
+  );
+  const minimumRadius = Math.min(...radii.filter((radius) => radius > EPSILON));
+  if (!Number.isFinite(minimumRadius)) return;
+  const inset = clamp(minimumRadius * 0.24, 5, 17);
+
+  const innerRing = members.map((member) => {
+    const point = points[member];
+    const direction = unitVector(center, point);
+    return pointAt(
+      point,
+      -direction.x,
+      -direction.y,
+      Math.min(inset, minimumRadius * 0.42),
+    );
+  });
+  if (innerRing.length >= 3) {
+    emit(
+      polylinePath(innerRing, true),
+      0.32,
+      0.72,
+      profile.ringDash,
+    );
+  }
+
+  for (const member of members) {
+    const point = points[member];
+    const direction = unitVector(point, center);
+    const start = pointAt(
+      point,
+      direction.x,
+      direction.y,
+      Math.min(4.2, minimumRadius * 0.2),
+    );
+    const end = pointAt(
+      point,
+      direction.x,
+      direction.y,
+      Math.min(4.2 + profile.tickLength * 1.6, minimumRadius * 0.62),
+    );
+    emit(linePath(start, end), 0.34, 0.7);
+  }
+
+  if (profile.endpoint === "fan") {
+    const ray = 3.2;
+    emit(
+      linePath(
+        { x: center.x - ray, y: center.y },
+        { x: center.x + ray, y: center.y },
+      ),
+      0.3,
+      0.66,
+    );
+    emit(
+      linePath(
+        { x: center.x, y: center.y - ray },
+        { x: center.x, y: center.y + ray },
+      ),
+      0.3,
+      0.66,
+    );
+  }
+}
+
+function addBranchMarks(
+  component: Component,
+  points: Point[],
+  profile: EngravingProfile,
+  emit: (
+    path: string,
+    opacity: number,
+    width: number,
+    dash?: string,
+  ) => void,
+  random: () => number,
+): void {
+  const { members, degree } = component;
+  for (const member of members) {
+    const point = points[member];
+    const degreeValue = degree.get(member) ?? 0;
+    if (degreeValue >= 3) {
+      const spokes = Math.min(7, 4 + degreeValue);
+      const startRadius = 4.1 + random() * 0.8;
+      for (let index = 0; index < spokes; index += 1) {
+        const angle =
+          (Math.PI * 2 * index) / spokes + random() * 0.16 - 0.08;
+        const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+        emit(
+          linePath(
+            pointAt(point, direction.x, direction.y, startRadius),
+            pointAt(
+              point,
+              direction.x,
+              direction.y,
+              startRadius + profile.tickLength + 1.2,
+            ),
+          ),
+          0.3,
+          0.66,
+        );
+      }
+    }
+    if (degreeValue === 1) {
+      const neighborIndex = component.edges.find(
+        ([a, b]) => a === member || b === member,
+      );
+      if (neighborIndex) {
+        const otherIndex =
+          neighborIndex[0] === member ? neighborIndex[1] : neighborIndex[0];
+        addEndpointMark(
+          point,
+          points[otherIndex],
+          profile,
+          emit,
+          random,
+          true,
+        );
+      }
+    }
+  }
+}
+
+function addMeshMarks(
+  component: Component,
+  points: Point[],
+  profile: EngravingProfile,
+  emit: (
+    path: string,
+    opacity: number,
+    width: number,
+    dash?: string,
+  ) => void,
+): void {
+  const { edges, members, degree } = component;
+  for (let index = 0; index < edges.length; index += 2) {
+    const [a, b] = edges[index];
+    const start = points[a];
+    const end = points[b];
+    if (!start || !end) continue;
+    const center = midpoint(start, end);
+    const direction = unitVector(start, end);
+    const normal = { x: -direction.y, y: direction.x };
+    const size = 2.2;
+    emit(
+      linePath(
+        pointAt(center, normal.x, normal.y, size),
+        pointAt(center, normal.x, normal.y, -size),
+      ),
+      profile.tickOpacity * 0.9,
+      profile.tickWidth,
+    );
+    emit(
+      linePath(
+        pointAt(center, direction.x, direction.y, size),
+        pointAt(center, direction.x, direction.y, -size),
+      ),
+      profile.tickOpacity * 0.7,
+      profile.tickWidth,
+    );
+  }
+
+  for (const member of members) {
+    if ((degree.get(member) ?? 0) < 4) continue;
+    const point = points[member];
+    const size = 2.6;
+    emit(
+      polylinePath(
+        [
+          { x: point.x, y: point.y - size },
+          { x: point.x + size, y: point.y },
+          { x: point.x, y: point.y + size },
+          { x: point.x - size, y: point.y },
+        ],
+        true,
+      ),
+      0.3,
+      0.66,
+    );
+  }
+}
+
+function addChainMarks(
+  component: Component,
+  points: Point[],
+  profile: EngravingProfile,
+  emit: (
+    path: string,
+    opacity: number,
+    width: number,
+    dash?: string,
+  ) => void,
+  random: () => number,
+): void {
+  for (const member of component.members) {
+    if ((component.degree.get(member) ?? 0) !== 1) continue;
+    const edge = component.edges.find(
+      ([a, b]) => a === member || b === member,
+    );
+    if (!edge) continue;
+    const other = edge[0] === member ? edge[1] : edge[0];
+    addEndpointMark(
+      points[member],
+      points[other],
+      profile,
+      emit,
+      random,
+      false,
+    );
+  }
+}
+
+function addIsolatedMark(
+  point: Point,
+  profile: EngravingProfile,
+  hasLines: boolean,
+  emit: (
+    path: string,
+    opacity: number,
+    width: number,
+    dash?: string,
+  ) => void,
+  halos: EngravingHalo[],
+  random: () => number,
+): void {
+  const scale = hasLines ? 1 : 0.86;
+  const radius = profile.haloRadius * scale + random() * 1.2;
+  halos.push({
+    cx: point.x,
+    cy: point.y,
+    r: radius,
+    opacity: profile.haloOpacity * (hasLines ? 1 : 0.78),
+    dash: profile.haloDash,
+  });
+
+  const rays = hasLines ? profile.rayCount : 4;
+  const offset = random() * (Math.PI / 4);
+  for (let index = 0; index < rays; index += 1) {
+    const angle = offset + (Math.PI * 2 * index) / rays;
+    const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+    const inner = pointAt(
+      point,
+      direction.x,
+      direction.y,
+      radius + 1.1,
+    );
+    const outer = pointAt(
+      point,
+      direction.x,
+      direction.y,
+      radius + 1.1 + profile.rayLength * (0.66 + random() * 0.5),
+    );
+    emit(
+      linePath(inner, outer),
+      profile.haloOpacity * 0.85,
+      0.62,
+    );
+  }
+}
+
+/**
+ * Turn the user's line graph into engraving marks. The graph itself is never
+ * changed: every echo is offset beside an existing segment, every ring is
+ * inset inside an existing cycle, and every halo belongs to one star. No mark
+ * ever joins two stars that the user did not join.
+ */
+export function engraveFigure(
+  points: Point[],
+  rawEdges: FigureEdge[],
+  lineStyle: unknown = DEFAULT_LINE_STYLE,
+  seed = 0,
+): Engraving {
+  const style = isLineStyle(lineStyle) ? lineStyle : DEFAULT_LINE_STYLE;
+  const profile = PROFILES[style];
+  const edges = normalizeEdgePairs(rawEdges, points.length);
+  const components = collectComponents(points, edges);
+  const isolated = points
+    .map((_, index) => index)
+    .filter(
+      (index) =>
+        !components.some((component) => component.members.includes(index)),
+    );
+
+  const paths: EngravingPath[] = [];
+  const halos: EngravingHalo[] = [];
+  const emit = (
+    path: string,
+    opacity: number,
+    width: number,
+    dash?: string,
+  ) => {
+    if (!path || paths.length >= MAX_ENGRAVING_PATHS) return;
+    paths.push({ d: path, opacity, width, dash });
+  };
+
+  components.forEach((component, componentIndex) => {
+    const random = mulberry32(
+      (seed ^
+        hashString(
+          `${style}|${componentIndex}|${component.members.join(",")}`,
+        )) >>>
+        0,
+    );
+    const weight = componentIndex === 0 ? 1 : 0.86;
+    const componentEmit = (
+      path: string,
+      opacity: number,
+      width: number,
+      dash?: string,
+    ) => emit(path, opacity * weight, width, dash);
+    const side = random() < 0.5 ? 1 : -1;
+
+    component.edges.forEach(([a, b], edgeIndex) => {
+      addEdgeMarks(
+        points[a],
+        points[b],
+        profile,
+        side,
+        edgeIndex,
+        componentEmit,
+      );
+    });
+
+    if (component.kind === "cycle") {
+      addCycleMarks(component, points, profile, componentEmit);
+    } else if (component.kind === "branch") {
+      addBranchMarks(component, points, profile, componentEmit, random);
+    } else if (component.kind === "mesh") {
+      addMeshMarks(component, points, profile, componentEmit);
+    } else {
+      addChainMarks(component, points, profile, componentEmit, random);
+    }
+  });
+
+  const hasLines = edges.length > 0;
+  for (const index of isolated) {
+    const random = mulberry32(
+      (seed ^ hashString(`${style}|isolated|${index}`)) >>> 0,
+    );
+    addIsolatedMark(
+      points[index],
+      profile,
+      hasLines,
+      emit,
+      halos,
+      random,
+    );
+  }
+
+  return {
+    paths,
+    halos,
+    parts: components.length,
+    isolated,
+  };
 }
 
 /**
  * Map the normalized stage onto a square artwork area. The full stage is
  * scaled uniformly and letterboxed, so a star's position relative to the
  * original frame, every distance between stars, and the drawing's orientation
- * are preserved. We deliberately do not re-fit the bounding box: a constellation
- * drawn in the upper-left stays in the upper-left instead of being recentered
- * and enlarged.
- *
- * The motif is placed per connected part. Its measured path bounds are aligned
- * with that part's principal axis and its stars, so the illustration follows
- * the actual drawing instead of sitting in a generic centred frame. Stars that
- * the user left unconnected are never included in a motif's frame.
+ * are preserved. The engraving is generated from that mapped graph.
  */
 export function layoutStarMap(
   stars: Point[],
@@ -582,7 +900,7 @@ export function layoutStarMap(
   box: ArtBox,
   seedKey = "",
   figureEdges: FigureEdge[] = [],
-  motifId = "whale",
+  lineStyle: unknown = DEFAULT_LINE_STYLE,
 ): ArtLayout {
   const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
   const inner = Math.max(1, box.size - box.padding * 2);
@@ -602,103 +920,30 @@ export function layoutStarMap(
     y: offsetY + star.y * drawnHeight,
   }));
 
-  const motif = getMotif(motifId);
-  const motifBounds = svgPathBounds(motif.paths);
   const chartCenter = {
     x: box.x + box.size / 2,
     y: box.y + box.size / 2,
   };
-
-  if (points.length === 0) {
-    const motifScale =
-      (inner * 0.55) / Math.max(motifBounds.width, motifBounds.height);
-    const placement: MotifPlacement = {
-      cx: chartCenter.x,
-      cy: chartCenter.y,
-      rotation: 0,
-      scaleX: motifScale,
-      scaleY: motifScale,
-      bounds: motifBounds,
-      opacity: 1,
-    };
-    return {
-      points,
-      chartCenter,
-      chartRadius: box.size * 0.455,
-      motif: placement,
-      motifs: [placement],
-      isolated: [],
-      seed: hashString(seedKey || "empty"),
-    };
-  }
-
-  const edges = figureEdges.filter(
-    ([a, b]) =>
-      Number.isInteger(a) &&
-      Number.isInteger(b) &&
-      a >= 0 &&
-      b >= 0 &&
-      a < points.length &&
-      b < points.length &&
-      a !== b,
+  const seed = hashString(
+    seedKey ||
+      stars
+        .map((star) => `${star.x.toFixed(3)},${star.y.toFixed(3)}`)
+        .join(";"),
   );
-
-  const groups = connectedGroups(points.length, edges);
-  const targets =
-    groups.length > 0
-      ? groups
-          .map((members) => ({
-            members,
-            edges: edgesWithin(members, edges),
-          }))
-          .sort(
-            (a, b) =>
-              b.members.length - a.members.length ||
-              b.edges.length - a.edges.length ||
-              a.members[0] - b.members[0],
-          )
-      : [
-          {
-            members: points.map((_, index) => index),
-            edges: [] as FigureEdge[],
-          },
-        ];
-
-  const isolated =
-    edges.length > 0
-      ? points
-          .map((_, index) => index)
-          .filter(
-            (index) =>
-              !targets.some((target) => target.members.includes(index)),
-          )
-      : [];
-
-  const placements = targets.map((target, index) =>
-    placementFor(
-      frameOf(
-        target.members.map((member) => points[member]),
-        target.edges,
-      ),
-      motif,
-      motifBounds,
-      box,
-      inner,
-      index === 0 ? 1 : 0.55,
-    ),
+  const engraving = engraveFigure(
+    points,
+    figureEdges,
+    lineStyle,
+    seed,
   );
 
   return {
     points,
     chartCenter,
     chartRadius: box.size * 0.455,
-    motif: placements[0],
-    motifs: placements,
-    isolated,
-    seed: hashString(
-      seedKey ||
-        stars.map((star) => `${star.x.toFixed(3)},${star.y.toFixed(3)}`).join(";"),
-    ),
+    isolated: engraving.isolated,
+    seed,
+    engraving,
   };
 }
 
@@ -718,8 +963,14 @@ export function decorativeStars(
   const stars: DecorativeStar[] = [];
   for (let i = 0; i < count; i += 1) {
     stars.push({
-      x: box.x + box.padding * 0.3 + random() * (box.size - box.padding * 0.6),
-      y: box.y + box.padding * 0.3 + random() * (box.size - box.padding * 0.6),
+      x:
+        box.x +
+        box.padding * 0.3 +
+        random() * (box.size - box.padding * 0.6),
+      y:
+        box.y +
+        box.padding * 0.3 +
+        random() * (box.size - box.padding * 0.6),
       r: 0.5 + random() * 1.2,
       opacity: 0.12 + random() * 0.34,
     });

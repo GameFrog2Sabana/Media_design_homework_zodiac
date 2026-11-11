@@ -156,7 +156,8 @@ describe("coerceConstellationResult", () => {
     return {
       name: "灯守りの鯨座",
       reading: "ひもりのくじらざ",
-      motif: "whale",
+      subject: "灯台を守る若い鯨",
+      lineStyle: "radial",
       paletteId: "tide",
       epithet: "夜を渡る星座",
       story:
@@ -173,7 +174,8 @@ describe("coerceConstellationResult", () => {
       {
         name: "灯守りの鯨座",
         reading: "ひもりのくじらざ",
-        motif: "whale",
+        subject: "灯台を守る若い鯨",
+        lineStyle: "radial",
         paletteId: "tide",
         epithet: "夜を渡る星座",
         story:
@@ -187,7 +189,8 @@ describe("coerceConstellationResult", () => {
     );
 
     expect(outcome.result.name).toBe("灯守りの鯨座");
-    expect(outcome.result.motif).toBe("whale");
+    expect(outcome.result.subject).toBe("灯台を守る若い鯨");
+    expect(outcome.result.lineStyle).toBe("radial");
     expect(outcome.repaired).toBe(false);
     expect(outcome.result.figureEdges).toEqual([[0, 1]]);
   });
@@ -284,7 +287,8 @@ describe("coerceConstellationResult", () => {
       {
         name: "灯守りの鯨座",
         reading: "ひもりのくじらざ",
-        motif: "whale",
+        subject: "灯台を守る若い鯨",
+        lineStyle: "radial",
         paletteId: "tide",
         epithet: "夜を渡る星座",
         story:
@@ -300,12 +304,13 @@ describe("coerceConstellationResult", () => {
     expect(outcome.result.formReading).toContain("横長");
   });
 
-  it("softly corrects a motif that clearly contradicts the silhouette", () => {
+  it("accepts a line style that differs from the geometric hint", () => {
     const outcome = coerceConstellationResult(
       {
         name: "灯守りの船座",
         reading: "ひもりのふねざ",
-        motif: "ship",
+        subject: "灯台を離れて海へ向かう小舟",
+        lineStyle: "hard",
         paletteId: "tide",
         epithet: "夜を渡る星座",
         story:
@@ -318,31 +323,9 @@ describe("coerceConstellationResult", () => {
       context,
     );
 
-    expect(["whale", "bird", "dragon"]).toContain(outcome.result.motif);
-    expect(outcome.result.motif).not.toBe("ship");
-    expect(outcome.rejectedFields).toContain("motifShape");
-  });
-
-  it("keeps a motif that already suits the silhouette", () => {
-    const outcome = coerceConstellationResult(
-      {
-        name: "灯守りの鯨座",
-        reading: "ひもりのくじらざ",
-        motif: "whale",
-        paletteId: "tide",
-        epithet: "夜を渡る星座",
-        story:
-          "遠い海の向こうで、若い鯨が灯りをともしていた。星をたどる者だけが、その帰り道を知っているという。",
-        figureEdges: [[0, 1]],
-        keywords: ["灯", "海", "帰り"],
-        formReading:
-          "横に広がる星々が、左上から右下へ緩やかな鎖を描いている。",
-      },
-      context,
-    );
-
-    expect(outcome.result.motif).toBe("whale");
-    expect(outcome.rejectedFields).not.toContain("motifShape");
+    expect(outcome.result.lineStyle).toBe("hard");
+    expect(outcome.result.subject).toBe("灯台を離れて海へ向かう小舟");
+    expect(outcome.rejectedFields).not.toContain("lineStyle");
   });
 
   it("does not invent connections when the user drew nothing", () => {
@@ -350,7 +333,8 @@ describe("coerceConstellationResult", () => {
       {
         name: "灯守りの鯨座",
         reading: "ひもりのくじらざ",
-        motif: "whale",
+        subject: "灯台を守る若い鯨",
+        lineStyle: "radial",
         paletteId: "tide",
         epithet: "夜を渡る星座",
         story:
@@ -376,7 +360,8 @@ describe("coerceConstellationResult", () => {
       {
         name: "灯守りの鯨座",
         reading: "ひもりのくじらざ",
-        motif: "whale",
+        subject: "灯台を守る若い鯨",
+        lineStyle: "radial",
         paletteId: "tide",
         epithet: "夜を渡る星座",
         story:
@@ -396,7 +381,8 @@ describe("coerceConstellationResult", () => {
       {
         name: "灯守りの鯨",
         reading: "ひもりのくじら",
-        motif: "whale",
+        subject: "灯台を守る若い鯨",
+        lineStyle: "radial",
         paletteId: "tide",
         epithet: "夜を渡る星座",
         story:
@@ -424,7 +410,8 @@ describe("coerceConstellationResult", () => {
       {
         name: "オリオン",
         reading: "おりおん",
-        motif: "unknown",
+        subject: "",
+        lineStyle: "unknown",
         paletteId: "unknown",
         epithet: "",
         story: "短い",
@@ -437,7 +424,8 @@ describe("coerceConstellationResult", () => {
     expect(outcome.repaired).toBe(true);
     expect(outcome.rejectedFields).toEqual(
       expect.arrayContaining([
-        "motif",
+        "subject",
+        "lineStyle",
         "paletteId",
         "name",
         "story",
@@ -447,6 +435,9 @@ describe("coerceConstellationResult", () => {
     );
     expect(outcome.result.name.length).toBeGreaterThanOrEqual(2);
     expect(outcome.result.figureEdges).toEqual([[0, 1]]);
-    expect(outcome.result.motif).toBeTruthy();
+    expect(outcome.result.subject.length).toBeGreaterThan(1);
+    expect(["flowing", "hard", "radial", "delicate"]).toContain(
+      outcome.result.lineStyle,
+    );
   });
 });

@@ -256,7 +256,7 @@ async function requestImprovement(config, summary) {
     "・評価数が少ないvariantについて、大きな書き換えをしない。",
     "・平均差が0.3未満なら、重みはほぼ現状維持にする。",
     "・fallback率が高い場合は、プロンプトを長くせず、出力の安定性を優先する。",
-    "・motifやpaletteの偏りは、物語の題材選びの指示で緩和する。",
+    "・lineStyleやpaletteの偏りは、物語の題材選びの指示で緩和する。",
     "・星の数やテーマ有無で評価差が大きい場合、構図の読み方や語彙の指示を調整する。",
     "・name は必ず「〜座」で終わるという条件と、story が神話のエピソードであるという条件を弱めない。",
     "・実在の星座名、占い、医療、差別、現代の固有名詞、説教くさい結末は避ける。",
@@ -288,7 +288,7 @@ async function requestImprovement(config, summary) {
 
   const user = [
     "以下の匿名集計と現在の設定から、次のバージョンのスタイル設定を提案してください。",
-    "設定は「星座の名前・物語・モチーフ選択」の指示に使われます。",
+    "設定は「星座の名前・物語・情景・線の性格の選択」の指示に使われます。",
     "",
     "【匿名集計】",
     JSON.stringify(summary, null, 2),
@@ -300,7 +300,7 @@ async function requestImprovement(config, summary) {
     "・variant A/Bの平均評価、評価数、4以上の比率",
     "・fallback率と平均レイテンシ",
     "・星の数、テーマ有無、初回/再生成での評価差",
-    "・motif / palette の人気と評価",
+    "・lineStyle / palette の人気と評価",
     "・recentThemes（個人情報を含まない短いことば）の傾向",
   ].join("\n");
 

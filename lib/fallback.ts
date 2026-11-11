@@ -4,10 +4,18 @@ import {
   type SketchTopology,
 } from "./edges";
 import { hashString, mulberry32 } from "./geometry";
-import { getMotif, MOTIFS, MOTIF_IDS } from "./motifs";
+import {
+  analyzeShape,
+  suggestLineStyle,
+  type ShapeAnalysis,
+} from "./shape";
 import { PALETTE_IDS } from "./palettes";
-import { analyzeShape, type ShapeAnalysis } from "./shape";
-import type { ConstellationResult, FigureEdge, Point } from "./types";
+import type {
+  ConstellationResult,
+  FigureEdge,
+  LineStyle,
+  Point,
+} from "./types";
 
 export interface FallbackInput {
   stars: Point[];
@@ -15,7 +23,6 @@ export interface FallbackInput {
   aspect?: number;
   theme?: string;
   attempt?: number;
-  motifId?: string;
 }
 
 const PREFIXES = [
@@ -148,86 +155,234 @@ const STRUCTURE_PREFIXES: Record<
   ],
 };
 
-const THEME_HINTS: Array<{ words: string[]; motif: string }> = [
-  { words: ["海", "潮", "波", "船", "舟", "港", "灯台"], motif: "whale" },
-  { words: ["旅", "舟", "航海", "出発", "港"], motif: "ship" },
-  { words: ["森", "狐", "きつね", "秋", "実り"], motif: "fox" },
-  { words: ["龍", "竜", "雨", "雷", "天"], motif: "dragon" },
-  { words: ["鳥", "空", "風", "翼", "渡り"], motif: "bird" },
-  { words: ["花", "春", "庭", "咲", "実"], motif: "bloom" },
-  { words: ["王", "冠", "誓い", "勝利"], motif: "crown" },
-  { words: ["鹿", "森", "山", "静けさ"], motif: "deer" },
-  { words: ["灯", "火", "部屋", "窓", "夜"], motif: "lantern" },
-  { words: ["鍵", "扉", "秘密", "記憶"], motif: "key" },
-  { words: ["月", "夜", "満ち欠け", "銀"], motif: "moon" },
-  { words: ["猫", "家", "窓辺", "眠り"], motif: "cat" },
-  { words: ["蝶", "夢", "変身", "花"], motif: "butterfly" },
-  { words: ["山", "峰", "谷", "遠景"], motif: "mountain" },
-  { words: ["魚", "水", "川", "海"], motif: "fish" },
-  { words: ["目", "眼", "見る", "瞳", "星"], motif: "eye" },
-];
-
-const MOTIF_PALETTE: Record<string, string> = {
-  whale: "tide",
-  fox: "ember",
-  dragon: "violet",
-  bird: "astral",
-  bloom: "rose",
-  crown: "astral",
-  ship: "tide",
-  deer: "jade",
-  lantern: "ember",
-  key: "jade",
-  moon: "violet",
-  cat: "astral",
-  butterfly: "rose",
-  mountain: "jade",
-  fish: "tide",
-  eye: "violet",
-};
-
-export function defaultPaletteForMotif(motifId: string): string {
-  return MOTIF_PALETTE[motifId] ?? PALETTE_IDS[0];
+interface SubjectNoun {
+  /** Short noun used in the generated name. */
+  text: string;
+  kana: string;
+  /** A concrete, free-form subject handed to the figure renderer. */
+  subject: string;
+  paletteId: string;
+  /** Theme words that make this noun a natural fit. */
+  words: string[];
 }
 
-const GROUP_MOTIFS = ["bird", "fish", "butterfly"];
-const SOLITARY_MOTIFS = ["lantern", "moon", "eye"];
+const SUBJECT_NOUNS: SubjectNoun[] = [
+  {
+    text: "灯台",
+    kana: "とうだい",
+    subject: "灯台を守る小さな火",
+    paletteId: "ember",
+    words: ["灯台", "灯", "火", "港", "窓", "夜"],
+  },
+  {
+    text: "鯨",
+    kana: "くじら",
+    subject: "海を渡る若い鯨",
+    paletteId: "tide",
+    words: ["鯨", "海", "潮", "波", "遠洋"],
+  },
+  {
+    text: "舟",
+    kana: "ふね",
+    subject: "星を積んだ小舟",
+    paletteId: "tide",
+    words: ["舟", "船", "航海", "旅", "出発"],
+  },
+  {
+    text: "狐",
+    kana: "きつね",
+    subject: "秋の森を抜ける狐",
+    paletteId: "ember",
+    words: ["狐", "きつね", "森", "秋", "実り"],
+  },
+  {
+    text: "龍",
+    kana: "りゅう",
+    subject: "雨を呼ぶ細い龍",
+    paletteId: "violet",
+    words: ["龍", "竜", "雨", "雷", "天"],
+  },
+  {
+    text: "鳥",
+    kana: "とり",
+    subject: "夜を渡る鳥",
+    paletteId: "astral",
+    words: ["鳥", "空", "風", "翼", "渡り"],
+  },
+  {
+    text: "花",
+    kana: "はな",
+    subject: "庭に咲く宵の花",
+    paletteId: "rose",
+    words: ["花", "春", "庭", "咲", "実"],
+  },
+  {
+    text: "冠",
+    kana: "かんむり",
+    subject: "誓いを宿す冠",
+    paletteId: "astral",
+    words: ["王", "冠", "誓い", "勝利"],
+  },
+  {
+    text: "鹿",
+    kana: "しか",
+    subject: "静かな森の鹿",
+    paletteId: "jade",
+    words: ["鹿", "森", "山", "静けさ"],
+  },
+  {
+    text: "鍵",
+    kana: "かぎ",
+    subject: "記憶を開く鍵",
+    paletteId: "jade",
+    words: ["鍵", "扉", "秘密", "記憶"],
+  },
+  {
+    text: "月",
+    kana: "つき",
+    subject: "欠けた月を待つ者",
+    paletteId: "violet",
+    words: ["月", "夜", "満ち欠け", "銀"],
+  },
+  {
+    text: "猫",
+    kana: "ねこ",
+    subject: "窓辺で眠る猫",
+    paletteId: "astral",
+    words: ["猫", "家", "窓辺", "眠り"],
+  },
+  {
+    text: "蝶",
+    kana: "ちょう",
+    subject: "夢を運ぶ蝶",
+    paletteId: "rose",
+    words: ["蝶", "夢", "変身"],
+  },
+  {
+    text: "山",
+    kana: "やま",
+    subject: "遠い峰の稜線",
+    paletteId: "jade",
+    words: ["山", "峰", "谷", "遠景"],
+  },
+  {
+    text: "魚",
+    kana: "さかな",
+    subject: "水底を光る魚",
+    paletteId: "tide",
+    words: ["魚", "水", "川", "海"],
+  },
+  {
+    text: "瞳",
+    kana: "ひとみ",
+    subject: "星を見つめる瞳",
+    paletteId: "violet",
+    words: ["目", "眼", "見る", "瞳", "星"],
+  },
+];
 
-function chooseMotif(
+const SHAPE_NOUNS: Record<string, SubjectNoun> = {
+  cycle: {
+    text: "環",
+    kana: "わ",
+    subject: "輪になって巡る光",
+    paletteId: "violet",
+    words: [],
+  },
+  branch: {
+    text: "枝",
+    kana: "えだ",
+    subject: "枝分かれの先の実",
+    paletteId: "jade",
+    words: [],
+  },
+  group: {
+    text: "群れ",
+    kana: "むれ",
+    subject: "散らばる星の群れ",
+    paletteId: "astral",
+    words: [],
+  },
+  isolated: {
+    text: "孤星",
+    kana: "こぼし",
+    subject: "余白に残った孤星",
+    paletteId: "astral",
+    words: [],
+  },
+  arc: {
+    text: "弓",
+    kana: "ゆみ",
+    subject: "弧を描く古い弓",
+    paletteId: "ember",
+    words: [],
+  },
+  horizontal: {
+    text: "帆",
+    kana: "ほ",
+    subject: "風を待つ帆",
+    paletteId: "tide",
+    words: [],
+  },
+  vertical: {
+    text: "塔",
+    kana: "とう",
+    subject: "空へ伸びる塔",
+    paletteId: "violet",
+    words: [],
+  },
+  diagonal: {
+    text: "舵",
+    kana: "かじ",
+    subject: "斜めに進む舵",
+    paletteId: "tide",
+    words: [],
+  },
+  compact: {
+    text: "巣",
+    kana: "す",
+    subject: "小さな星の巣",
+    paletteId: "rose",
+    words: [],
+  },
+  default: {
+    text: "星",
+    kana: "ほし",
+    subject: "名もない星々",
+    paletteId: "astral",
+    words: [],
+  },
+};
+
+function chooseSubjectNoun(
   theme: string,
-  rng: () => number,
   topology: SketchTopology,
   analysis: ShapeAnalysis,
-): string {
-  const ranked = analysis.motifMatches;
-  if (ranked.length === 0) return MOTIF_IDS[0];
-  const topScore = ranked[0].score;
-  const shapeCandidate = (ids: string[]): string | null =>
-    ranked.find(
-      (match) => ids.includes(match.id) && match.score >= topScore - 1,
-    )?.id ?? null;
-
-  // Separate line groups read as a flock or a school. Prefer a motif that can
-  // hold several bodies, but only when it still suits the silhouette.
-  if (topology.hasLines && topology.partCount >= 2) {
-    const group = shapeCandidate(GROUP_MOTIFS);
-    if (group) return group;
-  }
-  const hint = THEME_HINTS.find((entry) =>
-    entry.words.some((word) => theme.includes(word)),
+  rng: () => number,
+): SubjectNoun {
+  const themed = SUBJECT_NOUNS.find((noun) =>
+    noun.words.some((word) => theme.includes(word)),
   );
-  if (hint) {
-    const match = ranked.find((candidate) => candidate.id === hint.motif);
-    if (match && match.score >= topScore - 1) return hint.motif;
-  }
-  if (topology.hasLines && topology.isolated.length > 0) {
-    const solitary = shapeCandidate(SOLITARY_MOTIFS);
-    if (solitary) return solitary;
-  }
+  if (themed) return themed;
 
-  // Keep a little variation among motifs that fit the shape equally well.
-  const shortlist = ranked.filter((match) => match.score >= topScore - 1);
-  return shortlist[Math.floor(rng() * shortlist.length)]?.id ?? ranked[0].id;
+  if (topology.hasLines) {
+    if (topology.partCount >= 3) return SHAPE_NOUNS.group;
+    if (topology.partCount === 2) return SHAPE_NOUNS.group;
+    if (topology.isolated.length > 0) return SHAPE_NOUNS.isolated;
+    if (topology.hasCycle) return SHAPE_NOUNS.cycle;
+    if (topology.hasBranch) return SHAPE_NOUNS.branch;
+  }
+  if (analysis.components.some((component) => component.pathShape === "arc")) {
+    return SHAPE_NOUNS.arc;
+  }
+  if (analysis.orientation === "horizontal") return SHAPE_NOUNS.horizontal;
+  if (analysis.orientation === "vertical") return SHAPE_NOUNS.vertical;
+  if (analysis.orientation === "diagonal") return SHAPE_NOUNS.diagonal;
+  if (analysis.orientation === "compact") return SHAPE_NOUNS.compact;
+
+  // A little deterministic variation for balanced drawings with no theme.
+  const pool = SUBJECT_NOUNS.slice(0, 8);
+  return pool[Math.floor(rng() * pool.length)] ?? SHAPE_NOUNS.default;
 }
 
 function charLength(value: string): number {
@@ -259,12 +414,12 @@ function topologyClause(topology: SketchTopology): string {
   if (topology.partCount >= 2) {
     const base = `空には${topology.partCount}つの離れたまとまりとして残った`;
     if (topology.isolated.length > 0) {
-      return `${base}。線に連ならない${topology.isolated.length}つの星は、余白のようにそのそばで瞬いている。`;
+      return `${base}。線につながらない${topology.isolated.length}つの星は、余白のようにそのそばで瞬いている。`;
     }
     return `${base}。`;
   }
   if (topology.isolated.length > 0) {
-    return `線に連ならない${topology.isolated.length}つの星は、余白のようにそのそばで瞬いている。`;
+    return `線につながらない${topology.isolated.length}つの星は、余白のようにそのそばで瞬いている。`;
   }
   if (topology.hasCycle) {
     return "星は輪になって、夜ごと同じ場所を巡っている。";
@@ -288,12 +443,6 @@ function topologyEpithet(topology: SketchTopology): string | null {
   if (topology.hasBranch) return "枝分かれの先を照らす星座";
   return "鎖のように連なる星座";
 }
-
-const GROUP_SUBJECTS: Record<string, string> = {
-  bird: "鳥たち",
-  fish: "魚たち",
-  butterfly: "蝶たち",
-};
 
 function structureKeyword(topology: SketchTopology): string | null {
   if (!topology.hasLines) return null;
@@ -332,51 +481,70 @@ function shapeEpithet(analysis: ShapeAnalysis): string | null {
 }
 
 function buildName(
-  motifId: string,
+  noun: SubjectNoun,
   rng: () => number,
   topology: SketchTopology,
 ): {
   name: string;
   reading: string;
 } {
-  const motif = getMotif(motifId);
   const pattern = Math.floor(rng() * 3);
   let candidate = { name: "", reading: "" };
 
   if (pattern === 0) {
     const prefix = PREFIXES[Math.floor(rng() * PREFIXES.length)];
     candidate = {
-      name: `${prefix.text}の${motif.label}`,
-      reading: `${prefix.kana}の${motif.reading}`,
+      name: `${prefix.text}の${noun.text}`,
+      reading: `${prefix.kana}の${noun.kana}`,
     };
   } else if (pattern === 1) {
     const suffix = SUFFIXES[Math.floor(rng() * SUFFIXES.length)];
     candidate = {
-      name: `${motif.label}の${suffix.text}`,
-      reading: `${motif.reading}の${suffix.kana}`,
+      name: `${noun.text}の${suffix.text}`,
+      reading: `${noun.kana}の${suffix.kana}`,
     };
   } else {
     const adjective = ADJECTIVES[Math.floor(rng() * ADJECTIVES.length)];
     candidate = {
-      name: `${adjective.text}${motif.label}`,
-      reading: `${adjective.kana}${motif.reading}`,
+      name: `${adjective.text}${noun.text}`,
+      reading: `${adjective.kana}${noun.kana}`,
     };
   }
 
   const structure = structurePrefix(topology, rng);
   if (structure) {
-    const withStructure = {
-      name: `${structure.text}${candidate.name}`,
-      reading: `${structure.kana}${candidate.reading}`,
-    };
-    if (charLength(withStructure.name) <= 11) candidate = withStructure;
+    const repeated =
+      structure.text.includes(noun.text) || noun.text.includes(structure.text);
+    if (!repeated) {
+      // The structure prefix already ends in "の". Stacking another "の" phrase
+      // on top produces names like "星々の静寂の群れ座", so it replaces the
+      // ordinary prefix and attaches directly to the noun.
+      const withStructure = {
+        name: `${structure.text}${noun.text}`,
+        reading: `${structure.kana}${noun.kana}`,
+      };
+      const suffix = SUFFIXES[Math.floor(rng() * SUFFIXES.length)];
+      const withSuffix = {
+        name: `${withStructure.name}の${suffix.text}`,
+        reading: `${withStructure.reading}の${suffix.kana}`,
+      };
+      if (
+        rng() < 0.4 &&
+        !withStructure.name.includes(suffix.text) &&
+        charLength(withSuffix.name) <= 11
+      ) {
+        candidate = withSuffix;
+      } else {
+        candidate = withStructure;
+      }
+    }
   }
 
   if (charLength(candidate.name) < 2 || charLength(candidate.name) > 11) {
     const prefix = PREFIXES[Math.floor(rng() * PREFIXES.length)];
     candidate = {
-      name: `${prefix.text}の${motif.label}`,
-      reading: `${prefix.kana}の${motif.reading}`,
+      name: `${prefix.text}の${noun.text}`,
+      reading: `${prefix.kana}の${noun.kana}`,
     };
   }
 
@@ -386,10 +554,25 @@ function buildName(
   };
 }
 
+function buildSubject(
+  noun: SubjectNoun,
+  topology: SketchTopology,
+): string {
+  if (topology.hasLines && topology.partCount >= 2) {
+    return `${noun.subject}が、離れた${topology.partCount}つのまとまりに分かれて瞬く夜`;
+  }
+  if (topology.hasLines && topology.isolated.length > 0) {
+    return `${noun.subject}と、線の届かない星々`;
+  }
+  return noun.subject;
+}
+
 /**
  * Deterministic, offline constellation generator. It is intentionally good
  * enough to stand on its own when no API key is configured, and it serves as
- * the safe repair path for malformed LLM output.
+ * the safe repair path for malformed LLM output. It never selects a fixed
+ * picture: it chooses a free-form subject and a line character, while the
+ * artwork itself is engraved from the user's graph.
  */
 export function buildFallback(input: FallbackInput): ConstellationResult {
   const stars = input.stars.length > 0 ? input.stars : [
@@ -418,14 +601,13 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
   const figureEdges = sketch;
   const analysis = analyzeShape(stars, figureEdges, aspect);
 
-  const motifId =
-    input.motifId && MOTIF_IDS.includes(input.motifId)
-      ? input.motifId
-      : chooseMotif(theme, rng, topology, analysis);
-  const motif = getMotif(motifId);
-  const paletteId = defaultPaletteForMotif(motifId);
+  const noun = chooseSubjectNoun(theme, topology, analysis, rng);
+  const lineStyle: LineStyle = suggestLineStyle(analysis);
+  const paletteId = PALETTE_IDS.includes(noun.paletteId)
+    ? noun.paletteId
+    : PALETTE_IDS[0];
 
-  const { name, reading } = buildName(motifId, rng, topology);
+  const { name, reading } = buildName(noun, rng, topology);
   const season = SEASONS[Math.floor(rng() * SEASONS.length)];
   const opening = MYTH_OPENINGS[Math.floor(rng() * MYTH_OPENINGS.length)];
   const action = ACTIONS[Math.floor(rng() * ACTIONS.length)];
@@ -436,11 +618,10 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
   const lead = theme
     ? `「${theme}」の気配が満ちる${season.jp}`
     : season.jp;
-  const subject =
-    topology.partCount >= 2
-      ? GROUP_SUBJECTS[motifId] ?? motif.subject
-      : motif.subject;
-  const story = `${opening}${lead}、${subject}は${action}。${topologyClause(topology)}${aftermath}。${stars.length}つの星をたどると、今夜も${ending}という。`;
+  const subject = buildSubject(noun, topology);
+  // The display subject may be a full clause. The myth needs a plain noun
+  // phrase before "は", otherwise it reads "...分かれて瞬くは数えていた".
+  const story = `${opening}${lead}、${noun.subject}は${action}。${topologyClause(topology)}${aftermath}。${stars.length}つの星をたどると、今夜も${ending}という。`;
 
   const epithet =
     topologyEpithet(topology) ??
@@ -449,7 +630,7 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
 
   const keywords = Array.from(
     new Set([
-      motif.label,
+      noun.text,
       shapeKeyword(analysis) ?? season.label,
       structureKeyword(topology) ?? quality,
     ]),
@@ -458,7 +639,8 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
   return {
     name,
     reading,
-    motif: motifId,
+    subject,
+    lineStyle,
     paletteId,
     epithet,
     story,
@@ -466,8 +648,4 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
     keywords,
     formReading: analysis.summary,
   };
-}
-
-export function motifDisplayName(motifId: string): string {
-  return MOTIFS.find((motif) => motif.id === motifId)?.label ?? "星";
 }

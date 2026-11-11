@@ -223,11 +223,14 @@ function groupedStats(records, keyFn) {
   return result;
 }
 
-function motifStats(records) {
-  const groups = groupBy(records, (record) => record.result?.motif ?? "unknown");
+function lineStyleStats(records) {
+  const groups = groupBy(
+    records,
+    (record) => record.result?.lineStyle ?? "unknown",
+  );
   return [...groups.entries()]
-    .map(([motif, list]) => ({
-      motif,
+    .map(([lineStyle, list]) => ({
+      lineStyle,
       ...baseStats(list),
     }))
     .sort((a, b) => b.generations - a.generations)
@@ -305,7 +308,7 @@ export function summarize(records, config, days = 30) {
     byAttempt: groupedStats(records, (record) =>
       Number(record.attempt) <= 1 ? "first" : "regenerated",
     ),
-    byMotif: motifStats(records),
+    byLineStyle: lineStyleStats(records),
     byPalette: paletteStats(records),
     recentThemes,
     currentConfig: {

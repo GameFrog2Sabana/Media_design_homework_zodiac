@@ -54,7 +54,7 @@ describe("buildPrompt", () => {
     expect(text).not.toContain("2〜9本");
   });
 
-  it("puts an explicit shape reading before the name and motif", () => {
+  it("puts an explicit shape reading before the name", () => {
     const text = promptText([
       [0, 1],
       [2, 3],
@@ -64,8 +64,22 @@ describe("buildPrompt", () => {
     expect(text).toContain("全体は横長");
     expect(text).toContain("視覚的な手がかり");
     expect(text).toContain("名前の着想候補");
-    expect(text).toContain("【モチーフ候補（この形との相性順）】");
     expect(text).toContain("最初に formReading");
     expect(text).toContain('"formReading"');
+  });
+
+  it("asks for graph-derived engraving instead of a fixed motif", () => {
+    const text = promptText([
+      [0, 1],
+      [2, 3],
+    ]);
+
+    expect(text).toContain("【刻線の手がかり】");
+    expect(text).toContain("固定の絵を回転・変形して当てはめるのではない");
+    expect(text).toContain("平行エコー線");
+    expect(text).toContain("破線ハロー");
+    expect(text).toContain('"subject"');
+    expect(text).toContain('"lineStyle"');
+    expect(text).not.toContain("【モチーフ候補");
   });
 });

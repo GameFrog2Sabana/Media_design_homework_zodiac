@@ -3,10 +3,10 @@ import {
   normalizeEdgePairs,
   sameEdgeSet,
 } from "./edges";
-import { buildFallback, defaultPaletteForMotif } from "./fallback";
-import { MOTIF_IDS } from "./motifs";
+import { buildFallback } from "./fallback";
+import { isLineStyle } from "./lineStyle";
 import { PALETTE_IDS } from "./palettes";
-import { analyzeShape, bestMotifForShape } from "./shape";
+import { analyzeShape } from "./shape";
 import type {
   ApiGenerateRequest,
   ApiRateRequest,
@@ -318,25 +318,29 @@ export function coerceConstellationResult(
     ? (raw as Record<string, unknown>)
     : {};
 
-  const rawMotif = typeof source.motif === "string" ? source.motif : "";
-  const motif = MOTIF_IDS.includes(rawMotif) ? rawMotif : "";
-  if (!motif) rejectedFields.push("motif");
-
   const fallback = buildFallback({
     stars: context.stars,
     sketchEdges: context.sketchEdges,
     aspect: context.aspect,
     theme: context.theme,
     attempt: context.attempt,
-    motifId: motif || undefined,
   });
+
+  const rawSubject = clean(source.subject, 80);
+  const subject = rawSubject.length >= 2 ? rawSubject : fallback.subject;
+  if (rawSubject.length < 2) rejectedFields.push("subject");
+
+  const lineStyle = isLineStyle(source.lineStyle)
+    ? source.lineStyle
+    : fallback.lineStyle;
+  if (!isLineStyle(source.lineStyle)) rejectedFields.push("lineStyle");
 
   let paletteId =
     typeof source.paletteId === "string" && PALETTE_IDS.includes(source.paletteId)
       ? source.paletteId
       : "";
   if (!paletteId) {
-    paletteId = motif ? defaultPaletteForMotif(motif) : fallback.paletteId;
+    paletteId = fallback.paletteId;
     rejectedFields.push("paletteId");
   }
 
@@ -399,33 +403,9 @@ export function coerceConstellationResult(
     rejectedFields.push("figureEdges");
   }
 
-  // Read the final drawing and require the motif to fit the actual silhouette.
-  // A merely unusual motif is still allowed when it sits near the top of the
-  // shape ranking, but a clearly contradicting motif is replaced by the best
-  // shape-grounded candidate.
+  // Read the final drawing so the geometry-grounded fallback summary is
+  // available even when the model's own reading is rejected.
   const analysis = analyzeShape(context.stars, figureEdges, context.aspect);
-  const bestMotif = bestMotifForShape(analysis);
-  let finalMotif = motif || fallback.motif;
-  if (motif) {
-    const rankIndex = analysis.motifMatches.findIndex(
-      (candidate) => candidate.id === motif,
-    );
-    const fit = rankIndex >= 0 ? analysis.motifMatches[rankIndex].score : -99;
-    const directional =
-      analysis.orientation === "horizontal" ||
-      analysis.orientation === "vertical" ||
-      analysis.orientation === "diagonal";
-    const allowedGap = directional ? 1 : 2;
-    const acceptable =
-      rankIndex >= 0 &&
-      rankIndex < 4 &&
-      fit >= bestMotif.score - allowedGap &&
-      fit >= 1;
-    if (!acceptable) {
-      finalMotif = bestMotif.id;
-      rejectedFields.push("motifShape");
-    }
-  }
 
   const rawFormReading = clean(source.formReading, 260);
   const formLength = Array.from(rawFormReading).length;
@@ -476,7 +456,8 @@ export function coerceConstellationResult(
     result: {
       name,
       reading,
-      motif: finalMotif,
+      subject,
+      lineStyle,
       paletteId,
       epithet,
       story,

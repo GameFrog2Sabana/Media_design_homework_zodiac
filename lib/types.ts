@@ -21,10 +21,19 @@ export interface Edge {
 /** An edge between two stars, stored as indices for generated artwork. */
 export type FigureEdge = [number, number];
 
+/**
+ * The character of the engraved linework generated from the user's drawing.
+ * The model chooses one; the renderer derives every mark from the graph.
+ */
+export type LineStyle = "flowing" | "hard" | "radial" | "delicate";
+
 export interface ConstellationResult {
   name: string;
   reading: string;
-  motif: string;
+  /** A free-form concrete subject, e.g. 「灯台を守る若い鯨」. */
+  subject: string;
+  /** The engraved-line character chosen for this figure. */
+  lineStyle: LineStyle;
   paletteId: string;
   epithet: string;
   story: string;
@@ -32,6 +41,12 @@ export interface ConstellationResult {
   keywords: string[];
   /** A short, geometry-grounded reading of the drawing. */
   formReading?: string;
+  /**
+   * @deprecated Fixed-motif id stored by gallery entries created before the
+   * engraving refactor. It is read only for display compatibility; no artwork
+   * is generated from this value.
+   */
+  motif?: string;
 }
 
 export type GenerationSource = "llm" | "fallback" | "offline";

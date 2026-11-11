@@ -88,7 +88,7 @@ const SHAPE_LABELS: Record<SketchShape, string> = {
 /**
  * Read the graph the user actually drew. We deliberately do not connect
  * components or add edges here: separate groups and untouched stars are part
- * of the composition and should reach the name, motif and myth.
+ * of the composition and should reach the name, subject and myth.
  */
 export function analyzeSketch(
   raw: FigureEdge[],

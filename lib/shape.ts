@@ -1,5 +1,4 @@
-import { MOTIFS } from "./motifs";
-import type { FigureEdge, Point } from "./types";
+import type { FigureEdge, LineStyle, Point } from "./types";
 
 const EPSILON = 1e-9;
 
@@ -48,13 +47,6 @@ export interface ShapeComponent {
   cycleShape: "三角形" | "四角形" | "丸い輪" | null;
 }
 
-export interface MotifMatch {
-  id: string;
-  label: string;
-  score: number;
-  reason: string;
-}
-
 export interface ShapeAnalysis {
   aspect: number;
   bounds: ShapeBounds;
@@ -73,42 +65,7 @@ export interface ShapeAnalysis {
   hasLines: boolean;
   gestures: string[];
   summary: string;
-  /** Best-first motif candidates for this particular silhouette. */
-  motifMatches: MotifMatch[];
 }
-
-interface MotifForm {
-  /** Dominant silhouette axis of the artwork. */
-  axis: "wide" | "tall" | "round";
-  /** Dominant stroke gesture. */
-  gesture: "curve" | "angle" | "radial" | "branch";
-  /** Whether the motif can read as several bodies / distant lights. */
-  group: boolean;
-}
-
-/**
- * Hand-tagged silhouettes for the curated motif library. These tags let the
- * prompt rank motifs by the figure the user actually drew instead of offering
- * all sixteen with equal weight.
- */
-const MOTIF_FORMS: Record<string, MotifForm> = {
-  whale: { axis: "wide", gesture: "curve", group: false },
-  fox: { axis: "round", gesture: "angle", group: false },
-  dragon: { axis: "wide", gesture: "curve", group: false },
-  bird: { axis: "wide", gesture: "curve", group: true },
-  bloom: { axis: "round", gesture: "radial", group: false },
-  crown: { axis: "wide", gesture: "angle", group: false },
-  ship: { axis: "tall", gesture: "angle", group: false },
-  deer: { axis: "tall", gesture: "branch", group: false },
-  lantern: { axis: "tall", gesture: "radial", group: true },
-  key: { axis: "wide", gesture: "angle", group: false },
-  moon: { axis: "round", gesture: "curve", group: false },
-  cat: { axis: "round", gesture: "angle", group: false },
-  butterfly: { axis: "round", gesture: "radial", group: true },
-  mountain: { axis: "wide", gesture: "angle", group: false },
-  fish: { axis: "wide", gesture: "curve", group: true },
-  eye: { axis: "wide", gesture: "radial", group: false },
-};
 
 function toWorld(star: Point, aspect: number): Point {
   return { x: star.x * aspect, y: 1 - star.y };
@@ -490,16 +447,10 @@ function separationPhrase(components: ShapeComponent[], bounds: ShapeBounds): st
   return "まとまり同士は近くにある";
 }
 
-/** Undirected angular distance between two axes, in the range 0..90°. */
-function axisDelta(a: number, b: number): number {
-  const raw = Math.abs(normalizeAngle(a) - normalizeAngle(b)) % 180;
-  return raw > 90 ? 180 - raw : raw;
-}
-
 /**
  * Group unconnected stars by proximity. When no lines exist these spatial
- * groups are the only "parts" the drawing has, so the motif ranking should be
- * able to read a tight cluster differently from a scattered field.
+ * groups are the only "parts" the drawing has, so the line-style suggestion
+ * can read a tight cluster differently from a scattered field.
  */
 function spatialClusters(points: Point[], bounds: ShapeBounds): number[][] {
   if (points.length < 2) return [];
@@ -570,7 +521,7 @@ function farthestStarClause(
 }
 
 function gesturesOf(
-  analysis: Omit<ShapeAnalysis, "gestures" | "summary" | "motifMatches">,
+  analysis: Omit<ShapeAnalysis, "gestures" | "summary">,
   separation: string,
 ): string[] {
   const gestures = new Set<string>();
@@ -600,164 +551,26 @@ function gesturesOf(
   return [...gestures].slice(0, 7);
 }
 
-function scoreMotif(
-  form: MotifForm,
-  motifAngle: number,
-  analysis: ShapeAnalysis,
-): { score: number; reasons: string[] } {
-  let score = 0;
-  const reasons: string[] = [];
-  const delta = axisDelta(analysis.angleDeg, motifAngle);
+/**
+ * Suggest the engraving character that fits the graph. This is only a hint for
+ * offline generation and for repairing an invalid model choice; the model may
+ * choose another style when its reading of the drawing supports it.
+ */
+export function suggestLineStyle(analysis: ShapeAnalysis): LineStyle {
+  const hasKind = (kind: ComponentKind) =>
+    analysis.components.some((component) => component.kind === kind);
+  const hasPathShape = (shape: ComponentPathShape) =>
+    analysis.components.some((component) => component.pathShape === shape);
 
-  switch (analysis.orientation) {
-    case "horizontal":
-      if (form.axis === "wide") {
-        score += 4;
-        reasons.push("横長の影が重なる");
-      } else if (form.axis === "round") {
-        score += 1;
-        reasons.push("丸い塊が横長の中に収まる");
-      } else {
-        score -= 2;
-      }
-      break;
-    case "vertical":
-      if (form.axis === "tall") {
-        score += 4;
-        reasons.push("縦の影が重なる");
-      } else if (form.axis === "round") {
-        score += 1;
-        reasons.push("丸い塊が縦長の中に収まる");
-      } else {
-        score -= 2;
-      }
-      break;
-    case "compact":
-      if (form.axis === "round") {
-        score += 4;
-        reasons.push("まとまった丸い影が重なる");
-      } else {
-        score -= 1;
-      }
-      break;
-    case "diagonal":
-      if (delta <= 24) {
-        score += 3;
-        reasons.push(
-          `斜め${Math.round(Math.abs(analysis.angleDeg))}°の主軸に沿う`,
-        );
-      } else if (form.axis === "wide" || form.axis === "tall") {
-        score += 1;
-        reasons.push("斜めの伸びに沿う");
-      } else {
-        score += 1;
-        reasons.push("斜めの余白に収まる");
-      }
-      break;
-    default:
-      if (form.axis === "round") {
-        score += 2;
-        reasons.push("均衡の取れた塊に収まる");
-      } else {
-        score += 1;
-      }
-      break;
-  }
-
-  // Even when the coarse outline is wide or tall, the artwork's own long axis
-  // should point the same way as the constellation. This is what lets a
-  // diagonal drawing pick a diagonal motif rather than a generic horizontal
-  // one.
-  if (
-    analysis.elongation >= 1.35 &&
-    analysis.orientation !== "diagonal" &&
-    analysis.orientation !== "compact"
-  ) {
-    if (delta <= 18) {
-      score += 2;
-      reasons.push("主軸の角度が重なる");
-    } else if (delta >= 55) {
-      score -= 2;
-    }
-  }
-
-  const hasArc = analysis.components.some((component) => component.pathShape === "arc");
-  const hasZigzag = analysis.components.some(
-    (component) => component.pathShape === "zigzag",
-  );
-  const hasBranch = analysis.components.some((component) => component.kind === "branch");
-  const hasCycle = analysis.components.some((component) => component.kind === "cycle");
-  const hasMesh = analysis.components.some((component) => component.kind === "mesh");
-
-  if (hasArc && form.gesture === "curve") {
-    score += 2;
-    reasons.push("弧の線が響く");
-  }
-  if (hasZigzag && form.gesture === "angle") {
-    score += 1;
-    reasons.push("折れ線の角度が響く");
-  }
-  if (hasBranch && form.gesture === "branch") {
-    score += 2;
-    reasons.push("枝分かれが響く");
-  }
-  if (hasCycle && (form.gesture === "radial" || form.axis === "round")) {
-    score += 2;
-    reasons.push("輪の形が響く");
-  }
-  if (hasMesh && form.gesture === "angle") {
-    score += 1;
-    reasons.push("網の角度が響く");
-  }
-
-  const groupSignal =
-    analysis.components.length >= 2 ||
-    (!analysis.hasLines && analysis.clusters.length >= 2);
-  const isolatedCount = analysis.hasLines ? analysis.isolated.length : 0;
-  if (groupSignal && form.group) {
-    score += 2;
-    reasons.push("複数のまとまりを群れとして読める");
-  }
-  if (isolatedCount > 0 && form.group) {
-    score += 1;
-    reasons.push("孤立星を連れとして読める");
-  }
-  if (!groupSignal && isolatedCount === 0 && form.group) {
-    score -= 1;
-  }
-
-  if (reasons.length === 0) reasons.push("形の余白を邪魔しない");
-  return { score, reasons };
-}
-
-/** Best-first motif ranking for one specific silhouette. */
-export function rankMotifs(analysis: ShapeAnalysis): MotifMatch[] {
-  const matches = MOTIFS.map((motif, index) => {
-    const form = MOTIF_FORMS[motif.id] ?? {
-      axis: "round" as const,
-      gesture: "curve" as const,
-      group: false,
-    };
-    const { score, reasons } = scoreMotif(form, motif.axisAngle, analysis);
-    return {
-      id: motif.id,
-      label: motif.label,
-      score,
-      reason: reasons.slice(0, 2).join("・"),
-      index,
-    };
-  });
-
-  matches.sort((a, b) => b.score - a.score || a.index - b.index);
-  return matches.map(({ index: _index, ...match }) => match);
-}
-
-export function motifFitScore(motifId: string, analysis: ShapeAnalysis): number {
-  return analysis.motifMatches.find((match) => match.id === motifId)?.score ?? -10;
-}
-
-export function bestMotifForShape(analysis: ShapeAnalysis): MotifMatch {
-  return analysis.motifMatches[0];
+  if (hasKind("cycle")) return "radial";
+  if (hasKind("mesh")) return "hard";
+  if (hasKind("branch")) return "flowing";
+  if (hasPathShape("arc")) return "flowing";
+  if (hasPathShape("zigzag")) return "hard";
+  if (analysis.components.length >= 2) return "delicate";
+  if (analysis.orientation === "compact") return "delicate";
+  if (analysis.hasLines && analysis.isolated.length > 0) return "radial";
+  return "flowing";
 }
 
 /** Concrete visual nouns the model may transform into a name. */
@@ -896,12 +709,9 @@ export function analyzeShape(
     hasLines,
   };
   const gestures = gesturesOf(base, separation);
-  const analysis: ShapeAnalysis = {
+  return {
     ...base,
     gestures,
     summary: `${parts.join("。")}。`,
-    motifMatches: [],
   };
-  analysis.motifMatches = rankMotifs(analysis);
-  return analysis;
 }

@@ -1,5 +1,6 @@
-import { decorativeStars, layoutStarMap, motifTransform } from "./art";
-import { getMotif } from "./motifs";
+import { decorativeStars, layoutStarMap } from "./art";
+import { displaySubject } from "./legacy";
+import { getLineStyle } from "./lineStyle";
 import { getPalette } from "./palettes";
 import type { GalleryItem } from "./types";
 
@@ -39,7 +40,8 @@ function formatDate(iso: string): string {
  */
 export function createShareSvg(item: GalleryItem): string {
   const palette = getPalette(item.result.paletteId);
-  const motif = getMotif(item.result.motif);
+  const style = getLineStyle(item.result.lineStyle);
+  const subject = displaySubject(item.result.subject, item.result.motif);
   const mapBox = { x: 120, y: 160, size: 840, padding: 76 };
   const layout = layoutStarMap(
     item.stars,
@@ -47,7 +49,7 @@ export function createShareSvg(item: GalleryItem): string {
     mapBox,
     item.id,
     item.result.figureEdges,
-    item.result.motif,
+    style.id,
   );
   const dust = decorativeStars(mapBox, layout.seed + 7, 70);
   const story = Array.from(item.result.story).slice(0, 200).join("");
@@ -68,29 +70,31 @@ export function createShareSvg(item: GalleryItem): string {
     )
     .join("");
 
-  const motifPaths = motif.paths
+  const engravingSvg = layout.engraving.paths
     .map(
       (path) =>
-        `<path d="${path}" fill="none" stroke="${palette.primary}" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round"/>`,
-    )
-    .join("");
-  const motifSvg = layout.motifs
-    .map(
-      (placement) =>
-        `<g transform="${motifTransform(placement)}" opacity="${(
-          0.25 * placement.opacity
-        ).toFixed(2)}">${motifPaths}</g>`,
+        `<path d="${path.d}" fill="none" stroke="${palette.secondary}" stroke-width="${(
+          path.width * 1.9
+        ).toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"${
+          path.dash ? ` stroke-dasharray="${path.dash}"` : ""
+        } opacity="${path.opacity.toFixed(2)}"/>`,
     )
     .join("");
 
-  const isolatedSvg = layout.isolated
-    .map((index) => {
-      const point = layout.points[index];
-      if (!point) return "";
-      return `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(
-        1,
-      )}" r="13" fill="none" stroke="${palette.primary}" stroke-width="1" stroke-dasharray="2 6" opacity="0.34"/>`;
-    })
+  const haloPattern = /^[0-9.]+ [0-9.]+$/;
+  const haloSvg = layout.engraving.halos
+    .map(
+      (halo) =>
+        `<circle cx="${halo.cx.toFixed(1)}" cy="${halo.cy.toFixed(
+          1,
+        )}" r="${(halo.r * 2.1).toFixed(1)}" fill="none" stroke="${
+          palette.secondary
+        }" stroke-width="1.2"${
+          halo.dash && haloPattern.test(halo.dash)
+            ? ` stroke-dasharray="${halo.dash}"`
+            : ""
+        } opacity="${halo.opacity.toFixed(2)}"/>`,
+    )
     .join("");
 
   const edgeSvg = item.result.figureEdges
@@ -148,7 +152,11 @@ export function createShareSvg(item: GalleryItem): string {
     .join("");
 
   const date = formatDate(item.createdAt);
-  const motifLabel = escapeXml(motif.label);
+  const styleLabel = escapeXml(style.label);
+  const subjectChars = Array.from(subject);
+  const subjectLine = escapeXml(
+    `${subjectChars.slice(0, 40).join("")}${subjectChars.length > 40 ? "…" : ""}`,
+  );
   const keywords = item.result.keywords
     .slice(0, 3)
     .map((keyword) => escapeXml(keyword))
@@ -183,8 +191,8 @@ export function createShareSvg(item: GalleryItem): string {
   <circle cx="${layout.chartCenter.x}" cy="${layout.chartCenter.y}" r="${
     layout.chartRadius + 26
   }" fill="none" stroke="${palette.primary}" stroke-width="1" opacity="0.08"/>
-  ${motifSvg}
-  ${isolatedSvg}
+  ${engravingSvg}
+  ${haloSvg}
   ${dustSvg}
   ${edgeSvg}
   ${starSvg}
@@ -220,6 +228,9 @@ export function createShareSvg(item: GalleryItem): string {
   <text x="120" y="1200" font-family="'Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif" font-size="27" fill="${
     palette.primary
   }" opacity="0.92">${escapeXml(item.result.epithet)}</text>
+  <text x="120" y="1236" font-family="'Yu Mincho','Hiragino Mincho ProN','Noto Serif JP',serif" font-size="19" letter-spacing="2" fill="${
+    palette.star
+  }" opacity="0.58">SUBJECT / ${subjectLine}</text>
   ${storySvg}
 
   <line x1="120" y1="1520" x2="960" y2="1520" stroke="${
@@ -227,7 +238,7 @@ export function createShareSvg(item: GalleryItem): string {
   }" stroke-width="1" opacity="0.16"/>
   <text x="120" y="1558" font-family="'Inter','Helvetica Neue',sans-serif" font-size="17" letter-spacing="3" fill="${
     palette.star
-  }" opacity="0.56">MOTIF / ${motifLabel.toUpperCase()}　　${keywords}</text>
+  }" opacity="0.56">FIGURE / ${styleLabel}　　${keywords}</text>
   <text x="960" y="1558" text-anchor="end" font-family="'Inter','Helvetica Neue',sans-serif" font-size="17" letter-spacing="2" fill="${
     palette.star
   }" opacity="0.42">${escapeXml(date)}</text>

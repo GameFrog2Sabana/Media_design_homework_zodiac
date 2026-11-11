@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeShape,
-  bestMotifForShape,
-  motifFitScore,
   shapeNameHints,
+  suggestLineStyle,
 } from "@/lib/shape";
 
 const horizontal = [
@@ -41,7 +40,6 @@ describe("analyzeShape", () => {
     const analysis = analyzeShape(horizontal, [], 1);
     expect(analysis.orientation).toBe("horizontal");
     expect(analysis.summary).toContain("横長");
-    expect(analysis.motifMatches.length).toBeGreaterThan(0);
   });
 
   it("reads a tall drawing as vertical", () => {
@@ -119,27 +117,83 @@ describe("analyzeShape", () => {
   });
 });
 
-describe("motif ranking", () => {
-  it("ranks a wide motif above a tall one for a horizontal drawing", () => {
-    const analysis = analyzeShape(horizontal, [], 1);
-    expect(motifFitScore("whale", analysis)).toBeGreaterThan(
-      motifFitScore("ship", analysis),
+describe("suggestLineStyle", () => {
+  it("suggests a flowing line for a soft arc", () => {
+    const stars = [
+      { x: 0.2, y: 0.8 },
+      { x: 0.3, y: 0.65 },
+      { x: 0.5, y: 0.58 },
+      { x: 0.7, y: 0.65 },
+      { x: 0.8, y: 0.8 },
+    ];
+    const analysis = analyzeShape(
+      stars,
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+      ],
+      1,
     );
-    expect(bestMotifForShape(analysis).score).toBeGreaterThanOrEqual(3);
+    expect(analysis.components[0].pathShape).toBe("arc");
+    expect(suggestLineStyle(analysis)).toBe("flowing");
   });
 
-  it("ranks a tall motif above a wide one for a vertical drawing", () => {
-    const analysis = analyzeShape(vertical, [], 1);
-    expect(motifFitScore("ship", analysis)).toBeGreaterThan(
-      motifFitScore("whale", analysis),
+  it("suggests a radial line for a closed cycle", () => {
+    const analysis = analyzeShape(
+      compact,
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+      ],
+      1,
     );
+    expect(suggestLineStyle(analysis)).toBe("radial");
   });
 
-  it("ranks a diagonal motif above a horizontal one for a diagonal drawing", () => {
-    const analysis = analyzeShape(diagonal, [], 1);
-    expect(motifFitScore("key", analysis)).toBeGreaterThan(
-      motifFitScore("whale", analysis),
+  it("suggests a flowing line for a branch", () => {
+    const stars = [
+      { x: 0.2, y: 0.5 },
+      { x: 0.45, y: 0.5 },
+      { x: 0.75, y: 0.25 },
+      { x: 0.75, y: 0.75 },
+    ];
+    const analysis = analyzeShape(
+      stars,
+      [
+        [0, 1],
+        [1, 2],
+        [1, 3],
+      ],
+      1,
     );
+    expect(analysis.components[0].kind).toBe("branch");
+    expect(suggestLineStyle(analysis)).toBe("flowing");
+  });
+
+  it("suggests a delicate line when the drawing has separate parts", () => {
+    const analysis = analyzeShape(
+      horizontal,
+      [
+        [0, 1],
+        [2, 3],
+      ],
+      1,
+    );
+    expect(suggestLineStyle(analysis)).toBe("delicate");
+  });
+
+  it("suggests a delicate line for a compact cluster without lines", () => {
+    const analysis = analyzeShape(compact, [], 1);
+    expect(suggestLineStyle(analysis)).toBe("delicate");
+  });
+
+  it("suggests a radial line when a chain leaves an isolated star", () => {
+    const analysis = analyzeShape(horizontal, [[0, 1]], 1);
+    expect(suggestLineStyle(analysis)).toBe("radial");
   });
 
   it("offers shape-derived name hints", () => {

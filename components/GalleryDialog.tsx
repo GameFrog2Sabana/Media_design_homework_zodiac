@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useId, useRef, useState } from "react";
-import { getMotif } from "@/lib/motifs";
+import { getLineStyle } from "@/lib/lineStyle";
 import type { GalleryItem } from "@/lib/types";
 import MiniStarMap from "./MiniStarMap";
 import {
@@ -150,7 +150,7 @@ export default function GalleryDialog({
             <div className="gallery-scroll">
               <div className="gallery-grid">
                 {items.map((item) => {
-                  const motif = getMotif(item.result.motif);
+                  const style = getLineStyle(item.result.lineStyle);
                   const isDeleting = deleteTarget === item.id;
                   return (
                     <article className="gallery-card" key={item.id}>
@@ -166,7 +166,7 @@ export default function GalleryDialog({
                             aspect={item.aspect}
                             figureEdges={item.result.figureEdges}
                             paletteId={item.result.paletteId}
-                            motif={item.result.motif}
+                            lineStyle={style.id}
                             seedKey={item.id}
                             className="gallery-map"
                             compact
@@ -177,7 +177,7 @@ export default function GalleryDialog({
                             {item.result.name}
                           </span>
                           <span className="gallery-meta">
-                            {formatDate(item.createdAt)} · {motif.label}
+                            {formatDate(item.createdAt)} · 刻線 {style.label}
                           </span>
                           <span className="gallery-rating">
                             {[1, 2, 3, 4, 5].map((score) => (

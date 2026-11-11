@@ -1,8 +1,8 @@
 "use client";
 
 import { useId } from "react";
-import { decorativeStars, layoutStarMap, motifTransform } from "@/lib/art";
-import { getMotif } from "@/lib/motifs";
+import { decorativeStars, layoutStarMap } from "@/lib/art";
+import { getLineStyle } from "@/lib/lineStyle";
 import { getPalette } from "@/lib/palettes";
 import type { FigureEdge, Point } from "@/lib/types";
 
@@ -11,7 +11,7 @@ interface MiniStarMapProps {
   aspect: number;
   figureEdges: FigureEdge[];
   paletteId: string;
-  motif: string;
+  lineStyle?: string;
   seedKey?: string;
   className?: string;
   compact?: boolean;
@@ -22,7 +22,7 @@ export default function MiniStarMap({
   aspect,
   figureEdges,
   paletteId,
-  motif,
+  lineStyle,
   seedKey = "",
   className,
   compact = false,
@@ -30,9 +30,16 @@ export default function MiniStarMap({
   const rawId = useId();
   const id = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
   const palette = getPalette(paletteId);
-  const motifArt = getMotif(motif);
+  const style = getLineStyle(lineStyle);
   const box = { x: 18, y: 18, size: 324, padding: 42 };
-  const layout = layoutStarMap(stars, aspect, box, seedKey, figureEdges, motif);
+  const layout = layoutStarMap(
+    stars,
+    aspect,
+    box,
+    seedKey,
+    figureEdges,
+    style.id,
+  );
   const dust = decorativeStars(box, layout.seed + 11, compact ? 26 : 46);
 
   return (
@@ -40,7 +47,7 @@ export default function MiniStarMap({
       className={className}
       viewBox="0 0 360 360"
       role="img"
-      aria-label={`${motifArt.label}をモチーフにした星座図`}
+      aria-label={`${style.label}の刻線で描いた星座図`}
     >
       <defs>
         <linearGradient id={`bg-${id}`} x1="0" y1="0" x2="1" y2="1">
@@ -92,41 +99,38 @@ export default function MiniStarMap({
           />
         ))}
 
-        {layout.motifs.map((placement, placementIndex) => (
-          <g
-            key={`m-${placementIndex}`}
-            transform={motifTransform(placement)}
-            fill="none"
-            stroke={palette.primary}
-            strokeWidth="0.9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={0.24 * placement.opacity}
-            vectorEffect="non-scaling-stroke"
-          >
-            {motifArt.paths.map((path, index) => (
-              <path key={index} d={path} vectorEffect="non-scaling-stroke" />
-            ))}
-          </g>
-        ))}
-
-        {layout.isolated.map((index) => {
-          const point = layout.points[index];
-          if (!point) return null;
-          return (
-            <circle
-              key={`i-${index}`}
-              cx={point.x}
-              cy={point.y}
-              r="5.8"
-              fill="none"
-              stroke={palette.primary}
-              strokeWidth="0.7"
-              strokeDasharray="1.2 3.4"
-              opacity="0.38"
+        <g
+          fill="none"
+          stroke={palette.secondary}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        >
+          {layout.engraving.paths.map((path, index) => (
+            <path
+              key={`g-${index}`}
+              d={path.d}
+              strokeWidth={path.width}
+              strokeDasharray={path.dash}
+              opacity={path.opacity}
+              vectorEffect="non-scaling-stroke"
             />
-          );
-        })}
+          ))}
+        </g>
+
+        {layout.engraving.halos.map((halo, index) => (
+          <circle
+            key={`h-${index}`}
+            cx={halo.cx}
+            cy={halo.cy}
+            r={halo.r}
+            fill="none"
+            stroke={palette.secondary}
+            strokeWidth="0.7"
+            strokeDasharray={halo.dash}
+            opacity={halo.opacity}
+          />
+        ))}
 
         {figureEdges.map(([a, b], index) => {
           const start = layout.points[a];
@@ -193,7 +197,7 @@ export default function MiniStarMap({
               fontSize="7"
               letterSpacing="2"
             >
-              MOTIF / {motifArt.label}
+              FIGURE / {style.label}
             </text>
             <path
               d="M 18 36 L 18 18 L 36 18"

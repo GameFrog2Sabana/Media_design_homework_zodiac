@@ -1,6 +1,7 @@
 import type { FigureEdge, Point } from "@/lib/types";
+import { LINE_STYLES } from "@/lib/lineStyle";
 import { PALETTES } from "@/lib/palettes";
-import { analyzeShape, shapeNameHints } from "@/lib/shape";
+import { analyzeShape, shapeNameHints, suggestLineStyle } from "@/lib/shape";
 import type { CreativityVariant } from "./creativity";
 
 export interface PromptInput {
@@ -115,16 +116,16 @@ export function buildPrompt(
   variant: CreativityVariant,
 ): ChatMessage[] {
   const shape = analyzeShape(input.stars, input.sketchEdges, input.aspect);
-  const motifMatches = shape.motifMatches.slice(0, 7);
-  const motifList = motifMatches
-    .map((motif) => `${motif.id}（${motif.label}）`)
-    .join("、");
-  const motifLines = motifMatches
-    .map(
-      (motif, index) =>
-        `${index + 1}. ${motif.id}（${motif.label}）— ${motif.reason}`,
-    )
-    .join("\n");
+  const suggestedStyle = suggestLineStyle(shape);
+  const lineStyleList = LINE_STYLES.map(
+    (style) => `${style.id}（${style.label}）`,
+  ).join("、");
+  const lineStyleLines = LINE_STYLES.map(
+    (style) =>
+      `${style.id}（${style.label}）— ${style.description}${
+        style.id === suggestedStyle ? "／この図との相性が良い" : ""
+      }`,
+  ).join("\n");
   const hints = shapeNameHints(shape).join("、");
   const paletteList = PALETTES.map(
     (palette) => `${palette.id}（${palette.label}）`,
@@ -133,7 +134,7 @@ export function buildPrompt(
   const system = [
     "あなたは「星座アトリエ」の星座キュレーター兼詩人です。",
     "ユーザーが星を配置し、必要なら線で下書きした星図を読み、この世に一つだけの架空の星座を創ります。",
-    "ユーザーが引いた線のつながりは、星座名・モチーフ・神話を決める最重要の手がかりです。線を勝手に連結したり、閉路を作ったりしないでください。",
+    "ユーザーが引いた線のつながりは、星座名・情景・神話を決める最重要の手がかりです。線を勝手に連結したり、閉路を作ったりしないでください。",
     "実在の星座の説明や天文学の事実を述べてはいけません。占い・医療・差別的な表現も禁止です。",
     "美的で具体的な日本語を使い、既視感のない組み合わせを選んでください。",
     "",
@@ -146,18 +147,19 @@ export function buildPrompt(
     "【出力の絶対条件】",
     "・JSONオブジェクトのみを出力する。前後に文章、Markdown、コードフェンスを付けない。",
     "・最初に formReading を書く。formReading は、星の向き・重心・密度・まとまり・孤立星・線の曲がりについて、実際に観測できる形だけを60〜120字の詩的な一文で説明する。文体は常体（〜だ／〜ている）に揃える。",
-    "・formReading に書いた形と、name・motif・epithet・story を必ず響き合わせる。形を無視した既製の星座名や絵柄を選ばない。",
+    "・formReading に書いた形と、name・subject・lineStyle・epithet・story を必ず響き合わせる。形を無視した既製の星座名や情景を選ばない。",
     "・name は2〜12文字で、必ず「〜座」で終わる。実在の星座名（「〜座」を含む）は使わない。",
     "・reading は name のひらがな読み。ひらがなのみ（長音「ー」可）で、末尾は「ざ」。",
     "・figureEdges は、ユーザーの下書き線と完全に同じ配列にする。線を追加・削除・連結・張り替えしてはいけない。",
     "・下書き線がない場合、figureEdges は必ず空配列 [] にする。星を勝手に結ばない。",
     "・星座は連結である必要はなく、閉路も不要。複数のまとまりや、線に含まれない星があってよい。",
     "・name・epithet・story は、星の配置、線のまとまりの数、輪・鎖・枝分かれ、孤立した星を読み取って発想する。複数パーツなら、その離れ方や群れを名前と神話に織り込む。",
-    "・figureEdges はモチーフの輪郭ではなく、ユーザーが引いた線そのもの。モチーフは、その線の主軸・曲がり・まとまりに沿うものを選ぶ。",
-    "・motif は、形との相性が上位の候補から選ぶ。候補の理由（主軸の角度、線の種類、まとまり）を formReading と結びつけて説明できるものだけを選ぶ。",
+    "・figureEdges はユーザーが引いた線そのもの。完成図の絵柄は、その線分グラフから「刻線」として決定的に生成される。固定の絵を回転・変形して当てはめるのではない。",
+    "・subject は、星の配置と線のまとまりから見える具体的な情景を、40字以内の自由記述で書く。例:「灯台を守る若い鯨」「枝分かれした道を辿る旅人」。形の読みに根ざし、既製の星座名は使わない。",
+    "・lineStyle は、線の性格を4種から選ぶ。鎖には flowing か delicate、折れ線や網には hard、輪には radial がよく合う。formReading の言葉と矛盾させない。",
     "・story は90〜160字。改行なし。神話のエピソードとして、誰が、何をして、なぜ空に置かれたのかを一つ描く。神や精霊、獣、旅人の小さな事件でよい。",
     "・keywords は2〜3個、各12文字以内。",
-    "・motif と paletteId は必ず候補から選ぶ。",
+    "・lineStyle と paletteId は必ず候補から選ぶ。",
   ].join("\n");
 
   const user = [
@@ -182,9 +184,10 @@ export function buildPrompt(
       input.theme ? `「${input.theme}」` : "なし"
     }`,
     "",
-    "【モチーフ候補（この形との相性順）】",
-    motifLines,
-    "この並びは、星の配置・線の主軸・曲がり・まとまりとの相性で決まっています。モチーフの線画は完成した星図の主軸に回転し、線のまとまりごとに配置されます。1位を基本に、formReading と理由が一致するものを選んでください。",
+    "【刻線の手がかり】",
+    "完成図では、ユーザーの線分そのものは動かさず、そのグラフのまわりに細い刻線だけを加える。鎖には平行エコー線と目盛り、輪には内側の同心リングと放射目盛り、枝分かれには末端の葉、網には辺の中点のハッチ、孤立星には破線ハローと光条が付く。線のない星は勝手に結ばない。",
+    `この図に合う線の性格の目安: ${suggestedStyle}`,
+    lineStyleLines,
     "",
     "【配色候補】",
     paletteList,
@@ -205,7 +208,8 @@ export function buildPrompt(
     '  "formReading": "横に長く伸びた星々が、右へ緩やかな弧を描いている。左手前ほど星が密で、右下に一つだけ離れた星が残る。",',
     '  "name": "灯待ちの狐座",',
     '  "reading": "ひまちのきつねざ",',
-    `  "motif": "上記候補のid (${motifList})",`,
+    '  "subject": "灯台を守りながら夜を渡る若い狐",',
+    `  "lineStyle": "上記候補のid (${lineStyleList})",`,
     `  "paletteId": "上記候補のid (${paletteList})",`,
     '  "epithet": "24文字以内の短い二つ名",',
     '  "story": "90〜160字の神話エピソード",',

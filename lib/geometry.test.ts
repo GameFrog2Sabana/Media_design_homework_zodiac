@@ -8,7 +8,7 @@ import {
   screenToStar,
   starToScreen,
 } from "@/lib/geometry";
-import { MOTIF_IDS } from "@/lib/motifs";
+import { LINE_STYLE_IDS } from "@/lib/lineStyle";
 import { PALETTE_IDS } from "@/lib/palettes";
 
 const stars = generateDefaultStars(7);
@@ -103,8 +103,8 @@ describe("edgesToIndices", () => {
 });
 
 describe("buildFallback", () => {
-  // Fixed coordinates keep the motif-ranking assertions deterministic. The
-  // random default scatter is exercised separately above.
+  // Fixed coordinates keep the fallback assertions deterministic. The random
+  // default scatter is exercised separately above.
   const fixedStars = [
     { x: 0.1, y: 0.55 },
     { x: 0.25, y: 0.6 },
@@ -132,7 +132,8 @@ describe("buildFallback", () => {
     expect(Array.from(result.name).length).toBeLessThanOrEqual(12);
     expect(result.name.endsWith("座")).toBe(true);
     expect(result.reading.endsWith("ざ")).toBe(true);
-    expect(MOTIF_IDS).toContain(result.motif);
+    expect(result.subject.length).toBeGreaterThan(1);
+    expect(LINE_STYLE_IDS).toContain(result.lineStyle);
     expect(PALETTE_IDS).toContain(result.paletteId);
     // The drawn line is preserved exactly; the fallback does not connect it
     // to the remaining stars on its own.
@@ -166,6 +167,49 @@ describe("buildFallback", () => {
     expect(result.name.endsWith("座")).toBe(true);
     expect(Array.from(result.name).length).toBeLessThanOrEqual(12);
     expect(result.story.length).toBeGreaterThan(30);
+  });
+
+  it("keeps the myth grammatical when the display subject is a clause", () => {
+    const result = buildFallback({
+      stars: fixedStars,
+      sketchEdges: normalizeEdgePairs(
+        [
+          [0, 1],
+          [2, 3],
+          [4, 5],
+        ],
+        fixedStars.length,
+      ),
+      aspect: 1.7,
+      theme: "",
+      attempt: 1,
+    });
+    expect(result.subject.endsWith("夜")).toBe(true);
+    expect(result.story).toContain("散らばる星の群れは");
+    expect(result.story).not.toMatch(/瞬くは/);
+  });
+
+  it("does not stack a structure prefix on a prefixed name", () => {
+    const names = Array.from({ length: 12 }, (_, index) =>
+      buildFallback({
+        stars: fixedStars,
+        sketchEdges: normalizeEdgePairs(
+          [
+            [0, 1],
+            [2, 3],
+            [4, 5],
+          ],
+          fixedStars.length,
+        ),
+        aspect: 1.7,
+        theme: "",
+        attempt: index + 1,
+      }).name,
+    );
+    for (const name of names) {
+      expect(name).not.toMatch(/(群れ|星々)の.+(群れ|星々)座$/);
+      expect(Array.from(name).length).toBeLessThanOrEqual(12);
+    }
   });
 
   it("keeps all 60 drawn segments without adding a connecting line", () => {
@@ -212,7 +256,15 @@ describe("buildFallback", () => {
     expect(sameEdgeSet(result.figureEdges, drawn)).toBe(true);
   });
 
-  it("picks a sea motif for a lighthouse theme", () => {
-    expect(buildFallback(input).motif).toBe("whale");
+  it("grounds the free-form subject in the user's theme", () => {
+    expect(buildFallback(input).subject).toContain("灯台");
+  });
+
+  it("keeps the figure empty when the user drew no lines", () => {
+    const result = buildFallback({ ...input, sketchEdges: [] });
+    expect(result.figureEdges).toEqual([]);
+    expect(result.name.endsWith("座")).toBe(true);
+    expect(result.subject.length).toBeGreaterThan(1);
+    expect(LINE_STYLE_IDS).toContain(result.lineStyle);
   });
 });
