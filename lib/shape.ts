@@ -577,34 +577,45 @@ export function suggestLineStyle(analysis: ShapeAnalysis): LineStyle {
 export function shapeNameHints(analysis: ShapeAnalysis): string[] {
   const hints = new Set<string>();
   const add = (...words: string[]) => words.forEach((word) => hints.add(word));
+  const hasKind = (kind: ComponentKind) =>
+    analysis.components.some((component) => component.kind === kind);
+  const hasPath = (shape: ComponentPathShape) =>
+    analysis.components.some((component) => component.pathShape === shape);
 
-  if (analysis.orientation === "horizontal") add("帆", "橋", "舟", "翼", "岸");
-  if (analysis.orientation === "vertical") add("塔", "灯", "柱", "梯子", "雨");
-  if (analysis.orientation === "diagonal") add("矢", "坂", "舵", "渡り");
-  if (analysis.orientation === "compact") add("巣", "実", "玉", "瞳", "貝");
-  if (analysis.orientation === "balanced") add("門", "庭", "環");
+  // Read the specific gesture first so its concrete metaphor survives the
+  // hint limit even when the drawing also has a strong orientation.
+  if (hasKind("branch")) add("鹿", "龍", "木", "鍵", "天秤", "珊瑚");
+  if (hasKind("cycle")) add("冠", "月", "花", "瞳", "鏡", "貝");
+  if (hasPath("arc")) add("弓", "三日月", "釣り針", "橋", "帆");
+  if (analysis.hasLines && analysis.isolated.length > 0) {
+    add("灯", "真珠", "種", "窓");
+  }
   if (
     analysis.components.length >= 2 ||
     (!analysis.hasLines && analysis.clusters.length >= 2)
   ) {
-    add("島", "群れ", "渡り", "遠雷");
+    add("鳥", "魚", "蝶", "島", "蛍");
   }
-  if (analysis.hasLines && analysis.isolated.length > 0) {
-    add("余白", "忘れ物", "孤星");
-  }
-  if (analysis.components.some((component) => component.kind === "cycle")) {
-    add("環", "輪", "門");
-  }
-  if (analysis.components.some((component) => component.kind === "branch")) {
-    add("枝", "叉", "鹿角");
-  }
-  if (analysis.components.some((component) => component.pathShape === "arc")) {
-    add("弓", "三日月", "釣り針");
-  }
-  if (analysis.density === "tight") add("巣", "実");
-  if (analysis.density === "scattered") add("野", "海", "星座");
 
-  return [...hints].slice(0, 8);
+  if (analysis.orientation === "horizontal") {
+    add("帆", "橋", "舟", "翼", "岸", "鯨");
+  }
+  if (analysis.orientation === "vertical") {
+    add("塔", "灯", "柱", "梯子", "木", "槍");
+  }
+  if (analysis.orientation === "diagonal") {
+    add("矢", "坂", "舵", "槍", "流星", "鳥");
+  }
+  if (analysis.orientation === "compact") {
+    add("巣", "実", "玉", "瞳", "貝", "鈴");
+  }
+  if (analysis.orientation === "balanced") {
+    add("鏡", "鈴", "鍵", "庭", "門");
+  }
+  if (analysis.density === "tight") add("巣", "実", "真珠");
+  if (analysis.density === "scattered") add("野", "海", "島", "蛍");
+
+  return [...hints].slice(0, 10);
 }
 
 /**

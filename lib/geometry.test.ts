@@ -184,31 +184,55 @@ describe("buildFallback", () => {
       theme: "",
       attempt: 1,
     });
+    const storySubject = result.subject.replace(/が、.*$/, "");
     expect(result.subject.endsWith("夜")).toBe(true);
-    expect(result.story).toContain("散らばる星の群れは");
+    expect(storySubject).not.toBe(result.subject);
+    expect(result.story).toContain(`${storySubject}は`);
     expect(result.story).not.toMatch(/瞬くは/);
   });
 
-  it("does not stack a structure prefix on a prefixed name", () => {
-    const names = Array.from({ length: 12 }, (_, index) =>
-      buildFallback({
-        stars: fixedStars,
-        sketchEdges: normalizeEdgePairs(
-          [
-            [0, 1],
-            [2, 3],
-            [4, 5],
-          ],
-          fixedStars.length,
-        ),
+  it("names a branching figure with a concrete metaphor that changes on regeneration", () => {
+    const branchStars = [
+      { x: 0.1, y: 0.55 },
+      { x: 0.35, y: 0.5 },
+      { x: 0.6, y: 0.25 },
+      { x: 0.6, y: 0.75 },
+      { x: 0.85, y: 0.1 },
+      { x: 0.85, y: 0.4 },
+    ];
+    const branchEdges = normalizeEdgePairs(
+      [
+        [0, 1],
+        [1, 2],
+        [1, 3],
+        [2, 4],
+        [2, 5],
+      ],
+      branchStars.length,
+    );
+    const branchNouns = ["鹿", "龍", "木", "鍵", "天秤", "珊瑚", "狐"];
+    const names = Array.from({ length: 18 }, (_, index) => {
+      const result = buildFallback({
+        stars: branchStars,
+        sketchEdges: branchEdges,
         aspect: 1.7,
         theme: "",
         attempt: index + 1,
-      }).name,
+      });
+      expect(result.figureEdges).toEqual(branchEdges);
+      return result.name;
+    });
+
+    const usedNouns = new Set(
+      names.flatMap((name) =>
+        branchNouns.filter((noun) => name.includes(noun)),
+      ),
     );
+    expect(usedNouns.size).toBeGreaterThan(1);
     for (const name of names) {
-      expect(name).not.toMatch(/(群れ|星々)の.+(群れ|星々)座$/);
-      expect(Array.from(name).length).toBeLessThanOrEqual(12);
+      expect(name.endsWith("座")).toBe(true);
+      expect(name).not.toMatch(/(枝|群れ|孤星|連なり|まとまり|線|形)座$/);
+      expect(branchNouns.some((noun) => name.includes(noun))).toBe(true);
     }
   });
 

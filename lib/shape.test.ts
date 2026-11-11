@@ -201,4 +201,39 @@ describe("suggestLineStyle", () => {
     expect(shapeNameHints(analysis)).toContain("帆");
     expect(shapeNameHints(analysis).length).toBeGreaterThan(0);
   });
+
+  it("offers concrete metaphors instead of structural words", () => {
+    const branch = analyzeShape(
+      [
+        { x: 0.2, y: 0.5 },
+        { x: 0.45, y: 0.5 },
+        { x: 0.75, y: 0.25 },
+        { x: 0.75, y: 0.75 },
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [1, 3],
+      ],
+      1,
+    );
+    const branchHints = shapeNameHints(branch);
+    expect(branchHints).toContain("鹿");
+    expect(branchHints).not.toContain("枝");
+    expect(branchHints).not.toContain("群れ");
+
+    const cycle = analyzeShape(
+      compact,
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+      ],
+      1,
+    );
+    const cycleHints = shapeNameHints(cycle);
+    expect(cycleHints).toContain("冠");
+    expect(cycleHints).not.toContain("環");
+  });
 });

@@ -123,38 +123,6 @@ const EPITHETS = [
 
 const QUALITIES = ["静謐", "遠景", "灯火", "潮", "余白", "気配", "夜想", "航路"];
 
-const STRUCTURE_PREFIXES: Record<
-  "twoParts" | "manyParts" | "isolated" | "cycle" | "branch" | "path",
-  Array<{ text: string; kana: string }>
-> = {
-  twoParts: [
-    { text: "ふたつの", kana: "ふたつの" },
-    { text: "遠い", kana: "とおい" },
-    { text: "群れの", kana: "むれの" },
-  ],
-  manyParts: [
-    { text: "散り星の", kana: "ちりぼしの" },
-    { text: "群れの", kana: "むれの" },
-    { text: "星々の", kana: "ほしぼしの" },
-  ],
-  isolated: [
-    { text: "余白の", kana: "よはくの" },
-    { text: "孤星の", kana: "こぼしの" },
-  ],
-  cycle: [
-    { text: "巡りの", kana: "めぐりの" },
-    { text: "環の", kana: "わの" },
-  ],
-  branch: [
-    { text: "三又の", kana: "みつまたの" },
-    { text: "枝の", kana: "えだの" },
-  ],
-  path: [
-    { text: "渡りの", kana: "わたりの" },
-    { text: "鎖の", kana: "くさりの" },
-  ],
-};
-
 interface SubjectNoun {
   /** Short noun used in the generated name. */
   text: string;
@@ -279,80 +247,272 @@ const SUBJECT_NOUNS: SubjectNoun[] = [
     paletteId: "violet",
     words: ["目", "眼", "見る", "瞳", "星"],
   },
-];
-
-const SHAPE_NOUNS: Record<string, SubjectNoun> = {
-  cycle: {
-    text: "環",
-    kana: "わ",
-    subject: "輪になって巡る光",
-    paletteId: "violet",
-    words: [],
+  {
+    text: "鏡",
+    kana: "かがみ",
+    subject: "夜を映す古い鏡",
+    paletteId: "astral",
+    words: ["鏡", "映す", "秘密"],
   },
-  branch: {
-    text: "枝",
-    kana: "えだ",
-    subject: "枝分かれの先の実",
+  {
+    text: "真珠",
+    kana: "しんじゅ",
+    subject: "余白に落ちた真珠",
+    paletteId: "rose",
+    words: ["真珠", "貝", "海", "光"],
+  },
+  {
+    text: "種",
+    kana: "たね",
+    subject: "次の春を待つ種",
     paletteId: "jade",
-    words: [],
+    words: ["種", "芽", "春", "実り"],
   },
-  group: {
-    text: "群れ",
-    kana: "むれ",
-    subject: "散らばる星の群れ",
-    paletteId: "astral",
-    words: [],
-  },
-  isolated: {
-    text: "孤星",
-    kana: "こぼし",
-    subject: "余白に残った孤星",
-    paletteId: "astral",
-    words: [],
-  },
-  arc: {
-    text: "弓",
-    kana: "ゆみ",
-    subject: "弧を描く古い弓",
+  {
+    text: "窓",
+    kana: "まど",
+    subject: "遠い家の窓",
     paletteId: "ember",
-    words: [],
+    words: ["窓", "家", "灯", "帰り"],
   },
-  horizontal: {
+  {
+    text: "木",
+    kana: "き",
+    subject: "芽吹きはじめた古い木",
+    paletteId: "jade",
+    words: ["木", "樹", "森", "芽"],
+  },
+  {
+    text: "天秤",
+    kana: "てんびん",
+    subject: "星を量る古い天秤",
+    paletteId: "astral",
+    words: ["天秤", "量る", "均衡", "誓い"],
+  },
+  {
+    text: "珊瑚",
+    kana: "さんご",
+    subject: "夜の海に育つ珊瑚",
+    paletteId: "rose",
+    words: ["珊瑚", "海", "潮", "島"],
+  },
+  {
+    text: "蛍",
+    kana: "ほたる",
+    subject: "岸辺を巡る蛍",
+    paletteId: "ember",
+    words: ["蛍", "夏", "岸", "光"],
+  },
+  {
+    text: "貝",
+    kana: "かい",
+    subject: "潮騒を閉じ込めた貝",
+    paletteId: "rose",
+    words: ["貝", "海", "潮", "真珠"],
+  },
+  {
+    text: "梯子",
+    kana: "はしご",
+    subject: "星へかかる梯子",
+    paletteId: "jade",
+    words: ["梯子", "空", "登る", "塔"],
+  },
+  {
+    text: "橋",
+    kana: "はし",
+    subject: "夜を渡る細い橋",
+    paletteId: "jade",
+    words: ["橋", "渡る", "岸", "川"],
+  },
+  {
+    text: "矢",
+    kana: "や",
+    subject: "空を切る一本の矢",
+    paletteId: "ember",
+    words: ["矢", "弓", "射る", "的"],
+  },
+  {
+    text: "槍",
+    kana: "やり",
+    subject: "夜を貫く銀の槍",
+    paletteId: "violet",
+    words: ["槍", "騎士", "銀", "夜"],
+  },
+  {
+    text: "実",
+    kana: "み",
+    subject: "秋に熟す小さな実",
+    paletteId: "rose",
+    words: ["実", "秋", "実り", "森"],
+  },
+  {
+    text: "鈴",
+    kana: "すず",
+    subject: "遠くで鳴る小さな鈴",
+    paletteId: "astral",
+    words: ["鈴", "音", "鳴る", "祈り"],
+  },
+  {
     text: "帆",
     kana: "ほ",
     subject: "風を待つ帆",
     paletteId: "tide",
-    words: [],
+    words: ["帆", "舟", "風", "港"],
   },
-  vertical: {
-    text: "塔",
-    kana: "とう",
-    subject: "空へ伸びる塔",
+  {
+    text: "弓",
+    kana: "ゆみ",
+    subject: "弧を描く古い弓",
+    paletteId: "ember",
+    words: ["弓", "矢", "射る", "月"],
+  },
+  {
+    text: "釣り針",
+    kana: "つりばり",
+    subject: "星を釣る銀の針",
+    paletteId: "tide",
+    words: ["釣り", "針", "海", "月"],
+  },
+  {
+    text: "三日月",
+    kana: "みかづき",
+    subject: "空に引かれた三日月",
     paletteId: "violet",
-    words: [],
+    words: ["三日月", "月", "欠け", "夜"],
   },
-  diagonal: {
+  {
+    text: "灯",
+    kana: "あかり",
+    subject: "遠くで守られる灯",
+    paletteId: "ember",
+    words: ["灯", "火", "窓", "帰り"],
+  },
+  {
+    text: "島",
+    kana: "しま",
+    subject: "海に浮かぶ小さな島",
+    paletteId: "tide",
+    words: ["島", "海", "孤", "岸"],
+  },
+  {
+    text: "砂時計",
+    kana: "すなどけい",
+    subject: "夜を量る砂時計",
+    paletteId: "violet",
+    words: ["砂時計", "時間", "夜", "砂"],
+  },
+  {
+    text: "翼",
+    kana: "つばさ",
+    subject: "夜を滑る翼",
+    paletteId: "astral",
+    words: ["翼", "鳥", "風", "空"],
+  },
+  {
+    text: "岸",
+    kana: "きし",
+    subject: "遠い岸辺",
+    paletteId: "tide",
+    words: ["岸", "海", "波", "帰り"],
+  },
+  {
+    text: "柱",
+    kana: "はしら",
+    subject: "天を支える柱",
+    paletteId: "violet",
+    words: ["柱", "塔", "支える", "天"],
+  },
+  {
+    text: "雨",
+    kana: "あめ",
+    subject: "静かに降る雨",
+    paletteId: "tide",
+    words: ["雨", "雲", "雷", "しずく"],
+  },
+  {
+    text: "坂",
+    kana: "さか",
+    subject: "星へ続く坂",
+    paletteId: "jade",
+    words: ["坂", "道", "登る", "丘"],
+  },
+  {
     text: "舵",
     kana: "かじ",
     subject: "斜めに進む舵",
     paletteId: "tide",
-    words: [],
+    words: ["舵", "舟", "航海", "進む"],
   },
-  compact: {
+  {
     text: "巣",
     kana: "す",
     subject: "小さな星の巣",
     paletteId: "rose",
-    words: [],
+    words: ["巣", "鳥", "卵", "家"],
   },
-  default: {
-    text: "星",
-    kana: "ほし",
-    subject: "名もない星々",
+  {
+    text: "玉",
+    kana: "たま",
+    subject: "手のひらに残る玉",
     paletteId: "astral",
-    words: [],
+    words: ["玉", "光", "手", "宝"],
   },
+  {
+    text: "流星",
+    kana: "りゅうせい",
+    subject: "夜を走る流星",
+    paletteId: "violet",
+    words: ["流星", "夜", "走る", "光"],
+  },
+];
+
+type ShapeNounKey =
+  | "cycle"
+  | "branch"
+  | "manyParts"
+  | "isolated"
+  | "arc"
+  | "horizontal"
+  | "vertical"
+  | "diagonal"
+  | "compact"
+  | "default";
+
+const NOUN_BY_TEXT = new Map(
+  SUBJECT_NOUNS.map((noun) => [noun.text, noun] as const),
+);
+
+function nounPool(...texts: string[]): SubjectNoun[] {
+  return texts
+    .map((text) => NOUN_BY_TEXT.get(text))
+    .filter((noun): noun is SubjectNoun => Boolean(noun));
+}
+
+/**
+ * Concrete things each drawing gesture can resemble. Every pool is made of
+ * animals, plants, natural objects or tools, so a branch never becomes
+ * "枝座" and a separate group never becomes "群れ座".
+ */
+const SHAPE_NOUN_POOLS: Record<ShapeNounKey, SubjectNoun[]> = {
+  cycle: nounPool("冠", "月", "花", "瞳", "鏡", "貝", "鈴"),
+  branch: nounPool("鹿", "龍", "木", "鍵", "天秤", "珊瑚", "狐"),
+  manyParts: nounPool("鳥", "魚", "蝶", "島", "蛍", "鯨", "舟", "珊瑚", "猫"),
+  isolated: nounPool("灯", "真珠", "種", "窓", "月", "猫"),
+  arc: nounPool("弓", "三日月", "釣り針", "橋", "帆", "鯨", "龍"),
+  horizontal: nounPool("帆", "橋", "舟", "翼", "岸", "鯨", "山", "魚"),
+  vertical: nounPool("塔", "灯", "柱", "梯子", "雨", "木", "槍", "窓", "砂時計"),
+  diagonal: nounPool("矢", "坂", "舵", "槍", "流星", "鳥"),
+  compact: nounPool("巣", "実", "玉", "瞳", "貝", "真珠", "種", "鈴", "砂時計"),
+  default: nounPool("灯", "種", "貝", "蝶", "鹿", "魚", "月", "舟", "鍵", "花", "猫", "鳥"),
 };
+
+function pickNoun(
+  pool: SubjectNoun[],
+  rng: () => number,
+): SubjectNoun | null {
+  if (pool.length === 0) return null;
+  return pool[Math.floor(rng() * pool.length)] ?? null;
+}
 
 function chooseSubjectNoun(
   theme: string,
@@ -365,48 +525,37 @@ function chooseSubjectNoun(
   );
   if (themed) return themed;
 
+  const keys: ShapeNounKey[] = [];
   if (topology.hasLines) {
-    if (topology.partCount >= 3) return SHAPE_NOUNS.group;
-    if (topology.partCount === 2) return SHAPE_NOUNS.group;
-    if (topology.isolated.length > 0) return SHAPE_NOUNS.isolated;
-    if (topology.hasCycle) return SHAPE_NOUNS.cycle;
-    if (topology.hasBranch) return SHAPE_NOUNS.branch;
+    if (topology.partCount >= 2) keys.push("manyParts");
+    if (topology.hasCycle) keys.push("cycle");
+    if (topology.hasBranch) keys.push("branch");
+    if (analysis.components.some((component) => component.pathShape === "arc")) {
+      keys.push("arc");
+    }
+    if (topology.isolated.length > 0) keys.push("isolated");
+  } else if (analysis.clusters.length >= 2) {
+    keys.push("manyParts");
   }
-  if (analysis.components.some((component) => component.pathShape === "arc")) {
-    return SHAPE_NOUNS.arc;
-  }
-  if (analysis.orientation === "horizontal") return SHAPE_NOUNS.horizontal;
-  if (analysis.orientation === "vertical") return SHAPE_NOUNS.vertical;
-  if (analysis.orientation === "diagonal") return SHAPE_NOUNS.diagonal;
-  if (analysis.orientation === "compact") return SHAPE_NOUNS.compact;
 
-  // A little deterministic variation for balanced drawings with no theme.
-  const pool = SUBJECT_NOUNS.slice(0, 8);
-  return pool[Math.floor(rng() * pool.length)] ?? SHAPE_NOUNS.default;
+  if (keys.length === 0) {
+    if (analysis.orientation === "horizontal") keys.push("horizontal");
+    else if (analysis.orientation === "vertical") keys.push("vertical");
+    else if (analysis.orientation === "diagonal") keys.push("diagonal");
+    else if (analysis.orientation === "compact") keys.push("compact");
+    else keys.push("default");
+  }
+
+  const candidates = [...new Set(keys.flatMap((key) => SHAPE_NOUN_POOLS[key]))];
+  return (
+    pickNoun(candidates, rng) ??
+    pickNoun(SHAPE_NOUN_POOLS.default, rng) ??
+    SUBJECT_NOUNS[0]
+  );
 }
 
 function charLength(value: string): number {
   return Array.from(value).length;
-}
-
-function structurePrefix(
-  topology: SketchTopology,
-  rng: () => number,
-): { text: string; kana: string } | null {
-  if (!topology.hasLines) return null;
-  const pool =
-    topology.partCount >= 3
-      ? STRUCTURE_PREFIXES.manyParts
-      : topology.partCount === 2
-        ? STRUCTURE_PREFIXES.twoParts
-        : topology.isolated.length > 0
-          ? STRUCTURE_PREFIXES.isolated
-          : topology.hasCycle
-            ? STRUCTURE_PREFIXES.cycle
-            : topology.hasBranch
-              ? STRUCTURE_PREFIXES.branch
-              : STRUCTURE_PREFIXES.path;
-  return pool[Math.floor(rng() * pool.length)];
 }
 
 function topologyClause(topology: SketchTopology): string {
@@ -483,7 +632,6 @@ function shapeEpithet(analysis: ShapeAnalysis): string | null {
 function buildName(
   noun: SubjectNoun,
   rng: () => number,
-  topology: SketchTopology,
 ): {
   name: string;
   reading: string;
@@ -509,35 +657,6 @@ function buildName(
       name: `${adjective.text}${noun.text}`,
       reading: `${adjective.kana}${noun.kana}`,
     };
-  }
-
-  const structure = structurePrefix(topology, rng);
-  if (structure) {
-    const repeated =
-      structure.text.includes(noun.text) || noun.text.includes(structure.text);
-    if (!repeated) {
-      // The structure prefix already ends in "の". Stacking another "の" phrase
-      // on top produces names like "星々の静寂の群れ座", so it replaces the
-      // ordinary prefix and attaches directly to the noun.
-      const withStructure = {
-        name: `${structure.text}${noun.text}`,
-        reading: `${structure.kana}${noun.kana}`,
-      };
-      const suffix = SUFFIXES[Math.floor(rng() * SUFFIXES.length)];
-      const withSuffix = {
-        name: `${withStructure.name}の${suffix.text}`,
-        reading: `${withStructure.reading}の${suffix.kana}`,
-      };
-      if (
-        rng() < 0.4 &&
-        !withStructure.name.includes(suffix.text) &&
-        charLength(withSuffix.name) <= 11
-      ) {
-        candidate = withSuffix;
-      } else {
-        candidate = withStructure;
-      }
-    }
   }
 
   if (charLength(candidate.name) < 2 || charLength(candidate.name) > 11) {
@@ -607,7 +726,7 @@ export function buildFallback(input: FallbackInput): ConstellationResult {
     ? noun.paletteId
     : PALETTE_IDS[0];
 
-  const { name, reading } = buildName(noun, rng, topology);
+  const { name, reading } = buildName(noun, rng);
   const season = SEASONS[Math.floor(rng() * SEASONS.length)];
   const opening = MYTH_OPENINGS[Math.floor(rng() * MYTH_OPENINGS.length)];
   const action = ACTIONS[Math.floor(rng() * ACTIONS.length)];

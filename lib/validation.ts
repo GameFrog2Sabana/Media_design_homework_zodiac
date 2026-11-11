@@ -27,6 +27,23 @@ export class ValidationError extends Error {
 
 const SESSION_PATTERN = /^[A-Za-z0-9_-]{8,80}$/;
 
+/**
+ * A name made only from the drawing's structure ("枝座", "群れ座") is not a
+ * concrete metaphor. Compounds that end in an animal, plant, natural object
+ * or tool, such as "枝先の鹿座", remain valid.
+ */
+const STRUCTURAL_NAME_ENDINGS = [
+  "枝分かれ",
+  "枝",
+  "群れ",
+  "孤星",
+  "連なり",
+  "まとまり",
+  "線",
+  "形",
+  "図",
+];
+
 /** Real constellations we do not want an invented constellation to shadow. */
 const REAL_CONSTELLATIONS = new Set(
   [
@@ -189,7 +206,12 @@ export function isAcceptableName(name: string): boolean {
   if (!trimmed.endsWith("座")) return false;
   if (/[<>{}[\]\\/|]/.test(trimmed)) return false;
   const normalized = trimmed.replace(/\s+/g, "").replace(/座$/, "");
-  return normalized.length > 0 && !REAL_CONSTELLATIONS.has(normalized);
+  if (normalized.length === 0 || REAL_CONSTELLATIONS.has(normalized)) {
+    return false;
+  }
+  return !STRUCTURAL_NAME_ENDINGS.some((ending) =>
+    normalized.endsWith(ending),
+  );
 }
 
 export function isKanaReading(reading: string): boolean {

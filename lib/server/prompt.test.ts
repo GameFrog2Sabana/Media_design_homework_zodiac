@@ -68,6 +68,20 @@ describe("buildPrompt", () => {
     expect(text).toContain('"formReading"');
   });
 
+  it("asks for concrete metaphors instead of structural names", () => {
+    const text = promptText([
+      [0, 1],
+      [2, 3],
+    ]);
+
+    expect(text).toContain("動物・植物・自然物・道具");
+    expect(text).toContain("図形の構造を表す語をそのまま名前にしない");
+    expect(text).toContain("枝分かれなら鹿の角");
+    expect(text).toContain("【命名の見立て】");
+    expect(text).toContain("名前の着想候補（動物・植物・自然物・道具");
+    expect(text).toContain("灯待ちの狐座");
+  });
+
   it("asks for graph-derived engraving instead of a fixed motif", () => {
     const text = promptText([
       [0, 1],

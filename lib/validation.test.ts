@@ -137,6 +137,15 @@ describe("name and reading checks", () => {
     expect(ensureConstellationSuffix("灯守りの鯨座")).toBe("灯守りの鯨座");
   });
 
+  it("rejects names made only from the drawing's structure", () => {
+    expect(isAcceptableName("枝座")).toBe(false);
+    expect(isAcceptableName("三又の枝座")).toBe(false);
+    expect(isAcceptableName("群れ座")).toBe(false);
+    expect(isAcceptableName("孤星座")).toBe(false);
+    expect(isAcceptableName("枝の鹿座")).toBe(true);
+    expect(isAcceptableName("群れの鳥座")).toBe(true);
+  });
+
   it("requires kana readings", () => {
     expect(isKanaReading("ひもり")).toBe(true);
     expect(isKanaReading("灯守り")).toBe(false);
