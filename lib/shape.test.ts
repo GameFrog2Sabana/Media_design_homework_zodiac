@@ -219,6 +219,7 @@ describe("suggestLineStyle", () => {
     );
     const branchHints = shapeNameHints(branch);
     expect(branchHints).toContain("鹿");
+    expect(branchHints).toContain("梟");
     expect(branchHints).not.toContain("枝");
     expect(branchHints).not.toContain("群れ");
 

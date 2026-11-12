@@ -297,6 +297,27 @@ const SUBJECT_NOUNS: SubjectNoun[] = [
     words: ["珊瑚", "海", "潮", "島"],
   },
   {
+    text: "梟",
+    kana: "ふくろう",
+    subject: "枝先で夜を見張る梟",
+    paletteId: "violet",
+    words: ["梟", "森", "夜", "見張る"],
+  },
+  {
+    text: "蔦",
+    kana: "つた",
+    subject: "古い壁を這う蔦",
+    paletteId: "jade",
+    words: ["蔦", "森", "壁", "絡む"],
+  },
+  {
+    text: "蜘蛛",
+    kana: "くも",
+    subject: "夜の糸を張る蜘蛛",
+    paletteId: "violet",
+    words: ["蜘蛛", "糸", "網", "夜"],
+  },
+  {
     text: "蛍",
     kana: "ほたる",
     subject: "岸辺を巡る蛍",
@@ -495,7 +516,7 @@ function nounPool(...texts: string[]): SubjectNoun[] {
  */
 const SHAPE_NOUN_POOLS: Record<ShapeNounKey, SubjectNoun[]> = {
   cycle: nounPool("冠", "月", "花", "瞳", "鏡", "貝", "鈴"),
-  branch: nounPool("鹿", "龍", "木", "鍵", "天秤", "珊瑚", "狐"),
+  branch: nounPool("鹿", "龍", "木", "鍵", "梟", "珊瑚", "狐", "蔦", "蜘蛛"),
   manyParts: nounPool("鳥", "魚", "蝶", "島", "蛍", "鯨", "舟", "珊瑚", "猫"),
   isolated: nounPool("灯", "真珠", "種", "窓", "月", "猫"),
   arc: nounPool("弓", "三日月", "釣り針", "橋", "帆", "鯨", "龍"),

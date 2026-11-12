@@ -584,7 +584,7 @@ export function shapeNameHints(analysis: ShapeAnalysis): string[] {
 
   // Read the specific gesture first so its concrete metaphor survives the
   // hint limit even when the drawing also has a strong orientation.
-  if (hasKind("branch")) add("鹿", "龍", "木", "鍵", "天秤", "珊瑚");
+  if (hasKind("branch")) add("鹿", "龍", "木", "鍵", "梟", "珊瑚", "蔦");
   if (hasKind("cycle")) add("冠", "月", "花", "瞳", "鏡", "貝");
   if (hasPath("arc")) add("弓", "三日月", "釣り針", "橋", "帆");
   if (analysis.hasLines && analysis.isolated.length > 0) {

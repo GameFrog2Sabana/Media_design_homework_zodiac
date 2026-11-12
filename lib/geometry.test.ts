@@ -210,7 +210,7 @@ describe("buildFallback", () => {
       ],
       branchStars.length,
     );
-    const branchNouns = ["鹿", "龍", "木", "鍵", "天秤", "珊瑚", "狐"];
+    const branchNouns = ["鹿", "龍", "木", "鍵", "梟", "珊瑚", "狐", "蔦", "蜘蛛"];
     const names = Array.from({ length: 18 }, (_, index) => {
       const result = buildFallback({
         stars: branchStars,
